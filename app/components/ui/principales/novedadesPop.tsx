@@ -11,6 +11,7 @@ import {
   Dimensions,
   Modal,
   Pressable,
+  Linking,
 } from "react-native";
 
 const API_KEY = "fa8d9fb775a751a64726e7a92e2061ff";
@@ -19,15 +20,29 @@ const IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500";
 
 const { width } = Dimensions.get("window");
 
+// 🔹 Definimos un tipo para películas y series
+type MovieOrSeries = {
+  id: number;
+  title?: string;
+  name?: string;
+  poster_path?: string;
+  backdrop_path?: string;
+  overview?: string;
+  vote_average?: number;
+  release_date?: string;
+  first_air_date?: string;
+};
+
 export default function NovedadesPopulares() {
-  const [trending, setTrending] = useState([]);
-  const [popularMovies, setPopularMovies] = useState([]);
-  const [popularSeries, setPopularSeries] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [trending, setTrending] = useState<MovieOrSeries[]>([]);
+  const [popularMovies, setPopularMovies] = useState<MovieOrSeries[]>([]);
+  const [popularSeries, setPopularSeries] = useState<MovieOrSeries[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
 
   // Modal
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<MovieOrSeries | null>(null);
+  const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const [trailerKey, setTrailerKey] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -46,7 +61,7 @@ export default function NovedadesPopulares() {
         setPopularMovies(moviesData.results || []);
         setPopularSeries(seriesData.results || []);
       } catch (error) {
-        console.error("Error al cargar datos de novedades populares:", error);
+        console.error("Error al cargar datos:", error);
       } finally {
         setLoading(false);
       }
@@ -55,17 +70,34 @@ export default function NovedadesPopulares() {
     fetchData();
   }, []);
 
-  const openModal = (item) => {
+  // 🔹 Abrir modal y buscar trailer
+  const openModal = async (item: MovieOrSeries) => {
     setSelectedItem(item);
     setModalVisible(true);
+
+    try {
+      const type = item.title ? "movie" : "tv";
+      const res = await fetch(`${BASE_URL}/${type}/${item.id}/videos?api_key=${API_KEY}&language=es-ES`);
+      const data = await res.json();
+      const trailer = data.results.find(
+        (vid: { type: string; site: string; key: string }) => vid.type === "Trailer" && vid.site === "YouTube"
+      );
+      setTrailerKey(trailer ? trailer.key : null);
+    } catch (err) {
+      console.log("Error cargando trailer:", err);
+      setTrailerKey(null);
+    }
   };
 
-  const renderItem = ({ item }) => (
+  // 🔹 Render de cada tarjeta
+  const renderItem = ({ item }: { item: MovieOrSeries }) => (
     <TouchableOpacity style={styles.card} onPress={() => openModal(item)}>
-      <Image
-        source={{ uri: `${IMAGE_BASE_URL}${item.poster_path}` }}
-        style={styles.poster}
-      />
+      {item.poster_path && (
+        <Image
+          source={{ uri: `${IMAGE_BASE_URL}${item.poster_path}` }}
+          style={styles.poster}
+        />
+      )}
       <Text style={styles.title} numberOfLines={1}>
         {item.title || item.name}
       </Text>
@@ -87,29 +119,24 @@ export default function NovedadesPopulares() {
         {/* Portada destacada */}
         {trending.length > 0 && (
           <View style={styles.featuredContainer}>
-            <Image
-              source={{ uri: `${IMAGE_BASE_URL}${trending[0].backdrop_path || trending[0].poster_path}` }}
-              style={styles.featuredImage}
-              resizeMode="cover"
-            />
+            {trending[0].backdrop_path && (
+              <Image
+                source={{ uri: `${IMAGE_BASE_URL}${trending[0].backdrop_path}` }}
+                style={styles.featuredImage}
+                resizeMode="cover"
+              />
+            )}
             <View style={styles.overlay}>
-              <Text style={styles.featuredTitle}>
-                {trending[0].title || trending[0].name}
-              </Text>
-              <Text style={styles.featuredOverview} numberOfLines={3}>
-                {trending[0].overview}
-              </Text>
-              <TouchableOpacity
-                style={styles.featuredButton}
-                onPress={() => openModal(trending[0])}
-              >
+              <Text style={styles.featuredTitle}>{trending[0].title || trending[0].name}</Text>
+              <Text style={styles.featuredOverview} numberOfLines={3}>{trending[0].overview}</Text>
+              <TouchableOpacity style={styles.featuredButton} onPress={() => openModal(trending[0])}>
                 <Text style={styles.featuredButtonText}>Ver Más</Text>
               </TouchableOpacity>
             </View>
           </View>
         )}
 
-        {/* Tendencias */}
+        {/* Secciones */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Tendencias del Día</Text>
           <FlatList
@@ -122,7 +149,6 @@ export default function NovedadesPopulares() {
           />
         </View>
 
-        {/* Películas Populares */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Películas Populares</Text>
           <FlatList
@@ -135,7 +161,6 @@ export default function NovedadesPopulares() {
           />
         </View>
 
-        {/* Series Populares */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Series Populares</Text>
           <FlatList
@@ -149,29 +174,33 @@ export default function NovedadesPopulares() {
         </View>
       </ScrollView>
 
-      {/* Modal de información */}
-      <Modal
-        visible={modalVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setModalVisible(false)}
-      >
+      {/* Modal */}
+      <Modal visible={modalVisible} animationType="slide" transparent>
         <View style={styles.modalBackground}>
           {selectedItem && (
             <View style={styles.modalContainer}>
-              <Image
-                source={{ uri: `${IMAGE_BASE_URL}${selectedItem.backdrop_path || selectedItem.poster_path}` }}
-                style={styles.modalImage}
-              />
+              {selectedItem.backdrop_path && (
+                <Image
+                  source={{ uri: `${IMAGE_BASE_URL}${selectedItem.backdrop_path}` }}
+                  style={styles.modalImage}
+                />
+              )}
               <Text style={styles.modalTitle}>{selectedItem.title || selectedItem.name}</Text>
               <Text style={styles.modalInfo}>
                 ⭐ {selectedItem.vote_average?.toFixed(1) || "N/A"} | 🗓 {selectedItem.release_date || selectedItem.first_air_date || "Fecha no disponible"}
               </Text>
               <Text style={styles.modalOverview}>{selectedItem.overview || "Sin descripción disponible."}</Text>
-              <Pressable
-                style={styles.modalCloseButton}
-                onPress={() => setModalVisible(false)}
-              >
+
+              {trailerKey && (
+                <TouchableOpacity
+                  style={[styles.featuredButton, { marginTop: 10 }]}
+                  onPress={() => Linking.openURL(`https://www.youtube.com/watch?v=${trailerKey}`)}
+                >
+                  <Text style={styles.featuredButtonText}>Ver Trailer</Text>
+                </TouchableOpacity>
+              )}
+
+              <Pressable style={styles.modalCloseButton} onPress={() => setModalVisible(false)}>
                 <Text style={styles.modalCloseText}>Cerrar</Text>
               </Pressable>
             </View>
@@ -182,7 +211,6 @@ export default function NovedadesPopulares() {
   );
 }
 
-// Estilos
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#141414", paddingTop: 10 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#141414" },

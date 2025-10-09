@@ -11,26 +11,51 @@ import {
   Modal,
   Pressable,
   Dimensions,
+  ListRenderItem,
 } from "react-native";
 import { API_KEY, BASE_URL, IMAGE_BASE_URL } from "@/service/apiThemoviedb";
 import { useMyList } from "@/components/ui/logeadoDatos/MyListContext";
+import { Linking } from "react-native";
 
 const { width } = Dimensions.get("window");
 
-export default function HomeScreen() {
+// 🧩 Tipo de datos para películas o series
+interface MediaItem {
+  id: number;
+  title?: string;
+  name?: string;
+  overview?: string;
+  poster_path?: string;
+  backdrop_path?: string;
+  release_date?: string;
+  first_air_date?: string;
+  vote_average?: number;
+}
+
+// 🧠 Tipado del contexto de Mi Lista
+interface MyListContextType {
+  addToMyList: (item: MediaItem) => void;
+  removeFromMyList: (item: MediaItem) => void;
+  isInMyList: (id: number) => boolean;
+  loading: boolean;
+}
+
+export default function HomeScreen(): JSX.Element {
   // 🔹 My Lista Context
-  const { addToMyList, removeFromMyList, isInMyList, loading: listLoading } = useMyList();
+  const { addToMyList, removeFromMyList, isInMyList, loading: listLoading } =
+    useMyList() as MyListContextType;
 
   // 🔹 Estados principales
-  const [featured, setFeatured] = useState(null);
-  const [movies, setMovies] = useState([]);
-  const [series, setSeries] = useState([]);
-  const [trending, setTrending] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [featured, setFeatured] = useState<MediaItem | null>(null);
+  const [movies, setMovies] = useState<MediaItem[]>([]);
+  const [series, setSeries] = useState<MediaItem[]>([]);
+  const [trending, setTrending] = useState<MediaItem[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [trailerKey, setTrailerKey] = useState<string | null>(null);
 
   // 🔹 Modal
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<MediaItem | null>(null);
+  const [modalVisible, setModalVisible] = useState<boolean>(false);
 
   // 🔹 Carga inicial de datos
   useEffect(() => {
@@ -46,10 +71,10 @@ export default function HomeScreen() {
         const seriesData = await seriesRes.json();
         const trendingData = await trendingRes.json();
 
-        setMovies(moviesData.results);
-        setSeries(seriesData.results);
-        setTrending(trendingData.results);
-        setFeatured(trendingData.results[0]);
+        setMovies(moviesData.results || []);
+        setSeries(seriesData.results || []);
+        setTrending(trendingData.results || []);
+        setFeatured(trendingData.results?.[0] || null);
       } catch (error) {
         console.error("Error cargando datos:", error);
       } finally {
@@ -61,15 +86,35 @@ export default function HomeScreen() {
   }, []);
 
   // 🔹 Abrir modal
-  const openModal = (item) => {
+  const openModal = async (item: MediaItem) => {
     setSelectedItem(item);
     setModalVisible(true);
+
+    try {
+      const type = item.title ? "movie" : "tv";
+      const res = await fetch(
+        `${BASE_URL}/${type}/${item.id}/videos?api_key=${API_KEY}&language=es-ES`
+      );
+      const data = await res.json();
+      const trailer = data.results?.find(
+        (vid: any) => vid.type === "Trailer" && vid.site === "YouTube"
+      );
+      setTrailerKey(trailer ? trailer.key : null);
+    } catch (err) {
+      console.log("Error cargando trailer:", err);
+      setTrailerKey(null);
+    }
   };
 
   // 🔹 Render de cada tarjeta
-  const renderItem = ({ item }) => (
+  const renderItem: ListRenderItem<MediaItem> = ({ item }) => (
     <TouchableOpacity style={styles.card} onPress={() => openModal(item)}>
-      <Image source={{ uri: `${IMAGE_BASE_URL}${item.poster_path}` }} style={styles.poster} />
+      {item.poster_path && (
+        <Image
+          source={{ uri: `${IMAGE_BASE_URL}${item.poster_path}` }}
+          style={styles.poster}
+        />
+      )}
     </TouchableOpacity>
   );
 
@@ -87,12 +132,20 @@ export default function HomeScreen() {
         {/* 🎬 Portada destacada */}
         {featured && (
           <View style={styles.banner}>
-            <Image source={{ uri: `${IMAGE_BASE_URL}${featured.backdrop_path}` }} style={styles.bannerImage} />
+            {featured.backdrop_path && (
+              <Image
+                source={{ uri: `${IMAGE_BASE_URL}${featured.backdrop_path}` }}
+                style={styles.bannerImage}
+              />
+            )}
             <View style={styles.bannerOverlay} />
             <View style={styles.bannerTextContainer}>
-              <Text style={styles.bannerTitle}>{featured.title || featured.name}</Text>
+              <Text style={styles.bannerTitle}>
+                {featured.title || featured.name}
+              </Text>
               <Text style={styles.bannerInfo}>
-                ⭐ {featured.vote_average?.toFixed(1) || "N/A"} | 🗓 {featured.release_date || "No disponible"}
+                ⭐ {featured.vote_average?.toFixed(1) || "N/A"} | 🗓{" "}
+                {featured.release_date || featured.first_air_date || "No disponible"}
               </Text>
               <Text style={styles.bannerDesc} numberOfLines={3}>
                 {featured.overview || "Sin descripción disponible."}
@@ -104,35 +157,81 @@ export default function HomeScreen() {
         {/* 🔥 Secciones */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Películas populares</Text>
-          <FlatList data={movies} renderItem={renderItem} keyExtractor={(item) => item.id.toString()} horizontal showsHorizontalScrollIndicator={false} />
+          <FlatList
+            data={movies}
+            renderItem={renderItem}
+            keyExtractor={(item) => item.id.toString()}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+          />
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Series populares</Text>
-          <FlatList data={series} renderItem={renderItem} keyExtractor={(item) => item.id.toString()} horizontal showsHorizontalScrollIndicator={false} />
+          <FlatList
+            data={series}
+            renderItem={renderItem}
+            keyExtractor={(item) => item.id.toString()}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+          />
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Tendencias del día</Text>
-          <FlatList data={trending} renderItem={renderItem} keyExtractor={(item) => item.id.toString()} horizontal showsHorizontalScrollIndicator={false} />
+          <FlatList
+            data={trending}
+            renderItem={renderItem}
+            keyExtractor={(item) => item.id.toString()}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+          />
         </View>
       </ScrollView>
 
       {/* 🔹 Modal */}
-      <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModalVisible(false)}>
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setModalVisible(false)}
+      >
         <View style={styles.modalBackground}>
           {selectedItem && (
             <View style={styles.modalContainer}>
-              <Image source={{ uri: `${IMAGE_BASE_URL}${selectedItem.backdrop_path || selectedItem.poster_path}` }} style={styles.modalImage} />
-              <Text style={styles.modalTitle}>{selectedItem.title || selectedItem.name}</Text>
-              <Text style={styles.modalInfo}>
-                ⭐ {selectedItem.vote_average?.toFixed(1) || "N/A"} | 🗓 {selectedItem.release_date || "No disponible"}
+              {selectedItem.backdrop_path && (
+                <Image
+                  source={{
+                    uri: `${IMAGE_BASE_URL}${
+                      selectedItem.backdrop_path || selectedItem.poster_path
+                    }`,
+                  }}
+                  style={styles.modalImage}
+                />
+              )}
+              <Text style={styles.modalTitle}>
+                {selectedItem.title || selectedItem.name}
               </Text>
-              <Text style={styles.modalOverview}>{selectedItem.overview || "Sin descripción disponible."}</Text>
+              <Text style={styles.modalInfo}>
+                ⭐ {selectedItem.vote_average?.toFixed(1) || "N/A"} | 🗓{" "}
+                {selectedItem.release_date ||
+                  selectedItem.first_air_date ||
+                  "No disponible"}
+              </Text>
+              <Text style={styles.modalOverview}>
+                {selectedItem.overview || "Sin descripción disponible."}
+              </Text>
 
               {/* 🔹 Botón Mi Lista */}
               <TouchableOpacity
-                style={[styles.myListButton, { backgroundColor: isInMyList(selectedItem.id) ? "#444" : "#E50914" }]}
+                style={[
+                  styles.myListButton,
+                  {
+                    backgroundColor: isInMyList(selectedItem.id)
+                      ? "#444"
+                      : "#E50914",
+                  },
+                ]}
                 onPress={() => {
                   if (isInMyList(selectedItem.id)) {
                     removeFromMyList(selectedItem);
@@ -141,10 +240,40 @@ export default function HomeScreen() {
                   }
                 }}
               >
-                <Text style={styles.myListText}>{isInMyList(selectedItem.id) ? "Eliminar de Mi Lista" : "Agregar a Mi Lista"}</Text>
+                <Text style={styles.myListText}>
+                  {isInMyList(selectedItem.id)
+                    ? "Eliminar de Mi Lista"
+                    : "Agregar a Mi Lista"}
+                </Text>
               </TouchableOpacity>
 
-              <Pressable style={styles.modalCloseButton} onPress={() => setModalVisible(false)}>
+              {trailerKey && (
+                <TouchableOpacity
+                  style={{
+                    marginTop: 15,
+                    backgroundColor: "#E50914",
+                    padding: 10,
+                    borderRadius: 8,
+                  }}
+                  onPress={() =>
+                    Linking.openURL(
+                      `https://www.youtube.com/watch?v=${trailerKey}`
+                    )
+                  }
+                >
+                  <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                    Ver Trailer
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              <Pressable
+                style={styles.modalCloseButton}
+                onPress={() => {
+                  setModalVisible(false);
+                  setTrailerKey(null);
+                }}
+              >
                 <Text style={styles.modalCloseText}>Cerrar</Text>
               </Pressable>
             </View>

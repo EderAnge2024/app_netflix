@@ -1,10 +1,52 @@
 // components/ui/principales/MiLista.tsx
 import React from "react";
-import { View, Text, FlatList, Image, TouchableOpacity, StyleSheet } from "react-native";
+import {
+  View,
+  Text,
+  FlatList,
+  Image,
+  TouchableOpacity,
+  StyleSheet,
+  ListRenderItem,
+} from "react-native";
 import { useMyList } from "@/components/ui/logeadoDatos/MyListContext";
 
-export default function MiLista() {
-  const { myList, removeFromMyList, loading } = useMyList();
+// 🧩 Tipo base de película/serie (según la API de TMDB)
+interface MediaItem {
+  id: number;
+  title?: string;
+  name?: string;
+  poster_path: string;
+  overview?: string;
+  release_date?: string;
+  first_air_date?: string;
+}
+
+// 🧠 Hook personalizado devuelve estos datos
+interface MyListContextType {
+  myList: MediaItem[];
+  removeFromMyList: (item: MediaItem) => void;
+  loading: boolean;
+}
+
+export default function MiLista(): JSX.Element {
+  const { myList, removeFromMyList, loading } = useMyList() as MyListContextType;
+
+  // 🔹 Render de cada item
+  const renderItem: ListRenderItem<MediaItem> = ({ item }) => (
+    <View style={styles.item}>
+      <Image
+        source={{ uri: `https://image.tmdb.org/t/p/w500${item.poster_path}` }}
+        style={styles.poster}
+      />
+      <View style={styles.info}>
+        <Text style={styles.title}>{item.title || item.name}</Text>
+        <TouchableOpacity onPress={() => removeFromMyList(item)}>
+          <Text style={styles.remove}>Eliminar</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 
   // 🔹 Spinner mientras se carga la lista
   if (loading) {
@@ -15,19 +57,6 @@ export default function MiLista() {
       </View>
     );
   }
-
-  // 🔹 Render de cada item
-  const renderItem = ({ item }) => (
-    <View style={styles.item}>
-      <Image source={{ uri: `https://image.tmdb.org/t/p/w500${item.poster_path}` }} style={styles.poster} />
-      <View style={styles.info}>
-        <Text style={styles.title}>{item.title || item.name}</Text>
-        <TouchableOpacity onPress={() => removeFromMyList(item)}>
-          <Text style={styles.remove}>Eliminar</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
 
   return (
     <View style={styles.container}>
