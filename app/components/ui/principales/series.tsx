@@ -370,8 +370,12 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingVertical: 5,
     width: 160,
-    elevation: 10,
-    zIndex: 30,
+    elevation: 20,
+    zIndex: 9999,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.5,
+    shadowRadius: 5,
   },
   dropdownItem: { paddingVertical: 8, paddingHorizontal: 12 },
   dropdownText: { color: "#ccc", fontSize: 15 },
@@ -440,6 +444,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
+  // 🔹 Listas
   section: { marginBottom: 30 },
   sectionTitle: {
     color: "#fff",
