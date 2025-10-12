@@ -177,8 +177,17 @@ export default function SeriesSection() {
               <Text style={styles.featuredOverview} numberOfLines={3}>
                 {featuredSerie.overview || "Sin descripción disponible."}
               </Text>
-              <View style={styles.featuredButton}>
-                <Text style={styles.featuredButtonText}>Ver más</Text>
+
+              <View style={styles.featuredButtonsContainer}>
+                {/* 🔹 Botón Reproducir (solo si hay backdrop) */}
+                {featuredSerie.backdrop_path && (
+                  <TouchableOpacity style={styles.playButton}>
+                    <Text style={styles.playButtonText}>▶ Reproducir</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={styles.featuredButton}>
+                  <Text style={styles.featuredButtonText}>Ver más</Text>
+                </TouchableOpacity>
               </View>
             </View>
           </TouchableOpacity>
@@ -260,35 +269,65 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingVertical: 5,
     width: 160,
-    elevation: 10,
-    zIndex: 30,
+    elevation: 20,
+    zIndex: 9999,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.5,
+    shadowRadius: 5,
   },
   dropdownItem: { paddingVertical: 8, paddingHorizontal: 12 },
   dropdownText: { color: "#ccc", fontSize: 15 },
   dropdownTextActive: { color: "#fff", fontWeight: "bold" },
 
-  featuredContainer: { width: "100%", height: 250, marginBottom: 20 },
-  featuredImage: { width: "100%", height: "100%" },
+  // 🔹 Banner destacado (mejorado)
+  featuredContainer: {
+    width: "100%",
+    height: 340, // 🔹 más grande
+    marginBottom: 20,
+    borderRadius: 10,
+    overflow: "hidden",
+  },
+  featuredImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 10,
+  },
   overlay: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    padding: 15,
+    paddingHorizontal: 20,
+    paddingVertical: 25,
+    backgroundColor: "rgba(0,0,0,0.55)",
   },
-  featuredTitle: { color: "#fff", fontSize: 22, fontWeight: "bold" },
-  featuredOverview: { color: "#fff", fontSize: 13 },
+  featuredTitle: { color: "#fff", fontSize: 24, fontWeight: "bold" },
+  featuredOverview: { color: "#fff", fontSize: 14, marginTop: 8 },
+
+  // 🔹 Botones de banner
+  featuredButtonsContainer: {
+    flexDirection: "row",
+    marginTop: 15,
+    alignItems: "center",
+  },
+  playButton: {
+    backgroundColor: "#fff",
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 5,
+    marginRight: 10,
+  },
+  playButtonText: { color: "#000", fontWeight: "bold", fontSize: 14 },
   featuredButton: {
     backgroundColor: "#E50914",
     paddingVertical: 8,
     paddingHorizontal: 15,
     borderRadius: 5,
-    alignSelf: "flex-start",
-    marginTop: 10,
   },
   featuredButtonText: { color: "#fff", fontWeight: "bold", fontSize: 14 },
 
+  // 🔹 Listas
   section: { marginBottom: 30 },
   sectionTitle: {
     color: "#fff",
