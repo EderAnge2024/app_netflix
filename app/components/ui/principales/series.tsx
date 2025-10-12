@@ -36,7 +36,7 @@ interface Video {
 interface SeriesByGenre {
   [genreName: string]: MediaItem[];
 }
-
+  
 interface SeriesSectionProps {}
 
 export default function SeriesSection({}: SeriesSectionProps) {
@@ -230,7 +230,7 @@ export default function SeriesSection({}: SeriesSectionProps) {
       <ScrollView>
         {/* 🎬 Serie destacada */}
         {featuredSerie && (
-          <View style={styles.featuredContainer}>
+          <TouchableOpacity style={styles.featuredContainer} onPress={() => openModal(featuredSerie)}>
             <Image
               source={{
                 uri: `${IMAGE_BASE_URL}${featuredSerie.backdrop_path || featuredSerie.poster_path}`,
@@ -257,7 +257,7 @@ export default function SeriesSection({}: SeriesSectionProps) {
                 </Pressable>
               </View>
             </View>
-          </View>
+          </TouchableOpacity>
         )}
 
         {/* 🔹 Series por género */}
@@ -288,7 +288,11 @@ export default function SeriesSection({}: SeriesSectionProps) {
               />
               <Text style={styles.modalTitle}>{selectedSerie.name}</Text>
               <Text style={styles.modalInfo}>
-                ⭐ {selectedSerie.vote_average?.toFixed(1) || "N/A"} | 🗓 {selectedSerie.first_air_date || "Fecha no disponible"}
+                ⭐ {selectedSerie.vote_average?.toFixed(1) || "N/A"} | 🗓{" "}
+                {selectedSerie.first_air_date || "Fecha no disponible"}
+              </Text>
+              <Text style={styles.modalOverview}>
+                {selectedSerie.overview || "Sin descripción disponible."}
               </Text>
               <Text style={styles.modalOverview}>
                 {selectedSerie.overview || "Sin descripción disponible."}

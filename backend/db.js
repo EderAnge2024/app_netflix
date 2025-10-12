@@ -5,9 +5,9 @@ const { Pool } = pkg;
 const pool = new Pool({
   host: "localhost",
   user: "postgres",
-  password: "edichogenial",
+  password: "portodander123",
   database: "appnetflix",
-  port: 5432,
+  port: 5433,
 });
 
 // Verificar conexión
