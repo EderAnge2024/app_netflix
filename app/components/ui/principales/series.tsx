@@ -11,8 +11,10 @@ import {
   Modal,
   Pressable,
   Dimensions,
+  Alert,
 } from "react-native";
 import { API_KEY, BASE_URL, IMAGE_BASE_URL } from "@/service/apiThemoviedb";
+import { WebView } from "react-native-webview";
 
 const { width } = Dimensions.get("window");
 
@@ -24,9 +26,13 @@ export default function SeriesSection() {
   const [loading, setLoading] = useState(true);
   const [dropdownVisible, setDropdownVisible] = useState(false);
 
-  // 🔹 Modal
+  // 🔹 Modal de info serie
   const [selectedSerie, setSelectedSerie] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
+
+  // 🔹 Modal del tráiler
+  const [trailerVisible, setTrailerVisible] = useState(false);
+  const [trailerKey, setTrailerKey] = useState(null);
 
   const fetchGenres = async () => {
     try {
@@ -47,6 +53,28 @@ export default function SeriesSection() {
     } catch (error) {
       console.error("Error al obtener series:", error);
       return [];
+    }
+  };
+
+  const fetchTrailer = async (serieId) => {
+    try {
+      const res = await fetch(`${BASE_URL}/tv/${serieId}/videos?api_key=${API_KEY}&language=es-ES`);
+      const data = await res.json();
+      const trailer = data.results.find((v) => v.type === "Trailer" && v.site === "YouTube");
+      return trailer ? trailer.key : null;
+    } catch (error) {
+      console.error("Error al obtener tráiler:", error);
+      return null;
+    }
+  };
+
+  const openTrailer = async (serieId) => {
+    const key = await fetchTrailer(serieId);
+    if (key) {
+      setTrailerKey(key);
+      setTrailerVisible(true);
+    } else {
+      Alert.alert("Tráiler no disponible", "Esta serie no tiene tráiler disponible.");
     }
   };
 
@@ -84,7 +112,6 @@ export default function SeriesSection() {
     }
   }, [selectedGenre, seriesByGenre]);
 
-  // 🔹 Abrir modal al tocar una serie
   const openModal = (serie) => {
     setSelectedSerie(serie);
     setModalVisible(true);
@@ -121,7 +148,7 @@ export default function SeriesSection() {
 
   return (
     <View style={styles.container}>
-      {/* 🔹 Encabezado tipo Netflix */}
+      {/* 🔹 Header Netflix */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Inicio</Text>
 
@@ -165,9 +192,7 @@ export default function SeriesSection() {
           <TouchableOpacity style={styles.featuredContainer} onPress={() => openModal(featuredSerie)}>
             <Image
               source={{
-                uri: `${IMAGE_BASE_URL}${
-                  featuredSerie.backdrop_path || featuredSerie.poster_path
-                }`,
+                uri: `${IMAGE_BASE_URL}${featuredSerie.backdrop_path || featuredSerie.poster_path}`,
               }}
               style={styles.featuredImage}
               resizeMode="cover"
@@ -177,17 +202,13 @@ export default function SeriesSection() {
               <Text style={styles.featuredOverview} numberOfLines={3}>
                 {featuredSerie.overview || "Sin descripción disponible."}
               </Text>
-
-              <View style={styles.featuredButtonsContainer}>
-                {/* 🔹 Botón Reproducir (solo si hay backdrop) */}
-                {featuredSerie.backdrop_path && (
-                  <TouchableOpacity style={styles.playButton}>
-                    <Text style={styles.playButtonText}>▶ Reproducir</Text>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity style={styles.featuredButton}>
+              <View style={styles.featuredButtonsRow}>
+                <Pressable style={styles.featuredButton} onPress={() => openModal(featuredSerie)}>
                   <Text style={styles.featuredButtonText}>Ver más</Text>
-                </TouchableOpacity>
+                </Pressable>
+                <Pressable style={styles.featuredButtonPlay} onPress={() => openTrailer(featuredSerie.id)}>
+                  <Text style={styles.featuredButtonText}>▶ Reproducir</Text>
+                </Pressable>
               </View>
             </View>
           </TouchableOpacity>
@@ -208,33 +229,66 @@ export default function SeriesSection() {
         ))}
       </ScrollView>
 
-      {/* 🔹 Modal de detalle de serie */}
+      {/* 🔹 Modal de información de serie */}
       <Modal visible={modalVisible} animationType="fade" transparent onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalBackground}>
           {selectedSerie && (
             <View style={styles.modalContainer}>
               <Image
                 source={{
-                  uri: `${IMAGE_BASE_URL}${
-                    selectedSerie.backdrop_path || selectedSerie.poster_path
-                  }`,
+                  uri: `${IMAGE_BASE_URL}${selectedSerie.backdrop_path || selectedSerie.poster_path}`,
                 }}
                 style={styles.modalImage}
               />
               <Text style={styles.modalTitle}>{selectedSerie.name}</Text>
               <Text style={styles.modalInfo}>
-                ⭐ {selectedSerie.vote_average?.toFixed(1) || "N/A"} | 🗓{" "}
-                {selectedSerie.first_air_date || "Fecha no disponible"}
+                ⭐ {selectedSerie.vote_average?.toFixed(1) || "N/A"} | 🗓 {selectedSerie.first_air_date || "Fecha no disponible"}
               </Text>
               <Text style={styles.modalOverview}>
                 {selectedSerie.overview || "Sin descripción disponible."}
               </Text>
+
+              {/* 🔹 Botones dentro del modal */}
+              <View style={styles.modalButtonsContainer}>
+                <Pressable
+                  style={styles.addButton}
+                  onPress={() => {
+                    Alert.alert("Agregado a tu lista", `${selectedSerie.name} se agregó a tu lista.`);
+                  }}
+                >
+                  <Text style={styles.addButtonText}>+ Mi Lista</Text>
+                </Pressable>
+
+                <Pressable style={styles.trailerButton} onPress={() => openTrailer(selectedSerie.id)}>
+                  <Text style={styles.trailerButtonText}>▶ Ver tráiler</Text>
+                </Pressable>
+              </View>
 
               <Pressable style={styles.modalCloseButton} onPress={() => setModalVisible(false)}>
                 <Text style={styles.modalCloseText}>Cerrar</Text>
               </Pressable>
             </View>
           )}
+        </View>
+      </Modal>
+
+      {/* 🎥 Modal del tráiler */}
+      <Modal visible={trailerVisible} animationType="slide" transparent onRequestClose={() => setTrailerVisible(false)}>
+        <View style={styles.trailerModalBackground}>
+          <View style={styles.trailerContainer}>
+            {trailerKey ? (
+              <WebView
+                source={{ uri: `https://www.youtube.com/embed/${trailerKey}?autoplay=1` }}
+                style={{ flex: 1, borderRadius: 10 }}
+                allowsFullscreenVideo
+              />
+            ) : (
+              <Text style={{ color: "#fff" }}>Cargando tráiler...</Text>
+            )}
+            <Pressable style={styles.trailerCloseButton} onPress={() => setTrailerVisible(false)}>
+              <Text style={styles.trailerCloseText}>Cerrar</Text>
+            </Pressable>
+          </View>
         </View>
       </Modal>
     </View>
@@ -246,7 +300,6 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   loadingText: { color: "#fff", marginTop: 10 },
 
-  // 🔹 Header Netflix
   header: {
     backgroundColor: "#141414",
     flexDirection: "row",
@@ -254,13 +307,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 15,
     paddingVertical: 12,
-    position: "relative",
     zIndex: 20,
   },
   headerTitle: { color: "#fff", fontSize: 18, fontWeight: "bold" },
   seriesMenuButton: { flexDirection: "row", alignItems: "center" },
 
-  // 🔽 Menú desplegable
   dropdownMenu: {
     position: "absolute",
     top: 50,
@@ -269,30 +320,15 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingVertical: 5,
     width: 160,
-    elevation: 20,
-    zIndex: 9999,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.5,
-    shadowRadius: 5,
+    elevation: 10,
+    zIndex: 30,
   },
   dropdownItem: { paddingVertical: 8, paddingHorizontal: 12 },
   dropdownText: { color: "#ccc", fontSize: 15 },
   dropdownTextActive: { color: "#fff", fontWeight: "bold" },
 
-  // 🔹 Banner destacado (mejorado)
-  featuredContainer: {
-    width: "100%",
-    height: 340, // 🔹 más grande
-    marginBottom: 20,
-    borderRadius: 10,
-    overflow: "hidden",
-  },
-  featuredImage: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 10,
-  },
+  featuredContainer: { width: "100%", height: 340, marginBottom: 20 },
+  featuredImage: { width: "100%", height: "100%", borderRadius: 10 },
   overlay: {
     position: "absolute",
     bottom: 0,
@@ -303,31 +339,22 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.55)",
   },
   featuredTitle: { color: "#fff", fontSize: 24, fontWeight: "bold" },
-  featuredOverview: { color: "#fff", fontSize: 14, marginTop: 8 },
-
-  // 🔹 Botones de banner
-  featuredButtonsContainer: {
-    flexDirection: "row",
-    marginTop: 15,
-    alignItems: "center",
-  },
-  playButton: {
-    backgroundColor: "#fff",
-    paddingVertical: 8,
-    paddingHorizontal: 18,
-    borderRadius: 5,
-    marginRight: 10,
-  },
-  playButtonText: { color: "#000", fontWeight: "bold", fontSize: 14 },
+  featuredOverview: { color: "#fff", fontSize: 14 },
+  featuredButtonsRow: { flexDirection: "row", gap: 10, marginTop: 10 },
   featuredButton: {
     backgroundColor: "#E50914",
-    paddingVertical: 8,
-    paddingHorizontal: 15,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
     borderRadius: 5,
   },
-  featuredButtonText: { color: "#fff", fontWeight: "bold", fontSize: 14 },
+  featuredButtonPlay: {
+    backgroundColor: "#fff",
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 5,
+  },
+  featuredButtonText: { color: "#000", fontWeight: "bold", fontSize: 14 },
 
-  // 🔹 Listas
   section: { marginBottom: 30 },
   sectionTitle: {
     color: "#fff",
@@ -340,13 +367,22 @@ const styles = StyleSheet.create({
   serieImage: { width: 120, height: 180, borderRadius: 8 },
   serieTitle: { color: "#fff", fontSize: 12, textAlign: "center", marginTop: 5 },
 
-  // 🔹 Modal
-  modalBackground: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "center", padding: 20 },
+  modalBackground: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.85)",
+    justifyContent: "center",
+    padding: 20,
+  },
   modalContainer: { backgroundColor: "#222", borderRadius: 10, padding: 20, alignItems: "center" },
   modalImage: { width: width - 80, height: 200, borderRadius: 10, marginBottom: 15 },
   modalTitle: { color: "#fff", fontSize: 24, fontWeight: "bold", marginBottom: 8, textAlign: "center" },
   modalInfo: { color: "#ccc", fontSize: 14, marginBottom: 10 },
   modalOverview: { color: "#ddd", fontSize: 14, lineHeight: 20, textAlign: "center" },
+  modalButtonsContainer: { flexDirection: "row", justifyContent: "center", marginTop: 15, gap: 10 },
+  addButton: { backgroundColor: "#333", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
+  addButtonText: { color: "#fff", fontWeight: "bold", fontSize: 14 },
+  trailerButton: { backgroundColor: "#E50914", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
+  trailerButtonText: { color: "#fff", fontWeight: "bold", fontSize: 14 },
   modalCloseButton: {
     marginTop: 15,
     backgroundColor: "#E50914",
@@ -355,4 +391,28 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   modalCloseText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
+
+  trailerModalBackground: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.9)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  trailerContainer: {
+    width: width - 40,
+    height: 250,
+    backgroundColor: "#000",
+    borderRadius: 10,
+    overflow: "hidden",
+  },
+  trailerCloseButton: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    backgroundColor: "#E50914",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  trailerCloseText: { color: "#fff", fontWeight: "bold" },
 });
