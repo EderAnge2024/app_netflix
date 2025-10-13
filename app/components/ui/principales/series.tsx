@@ -288,8 +288,7 @@ export default function SeriesSection({}: SeriesSectionProps) {
               />
               <Text style={styles.modalTitle}>{selectedSerie.name}</Text>
               <Text style={styles.modalInfo}>
-                ⭐ {selectedSerie.vote_average?.toFixed(1) || "N/A"} | 🗓{" "}
-                {selectedSerie.first_air_date || "Fecha no disponible"}
+                ⭐ {selectedSerie.vote_average?.toFixed(1) || "N/A"} | 🗓 {selectedSerie.first_air_date || "Fecha no disponible"}
               </Text>
               <Text style={styles.modalOverview}>
                 {selectedSerie.overview || "Sin descripción disponible."}
@@ -370,12 +369,8 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingVertical: 5,
     width: 160,
-    elevation: 20,
-    zIndex: 9999,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.5,
-    shadowRadius: 5,
+    elevation: 10,
+    zIndex: 30,
   },
   dropdownItem: { paddingVertical: 8, paddingHorizontal: 12 },
   dropdownText: { color: "#ccc", fontSize: 15 },
