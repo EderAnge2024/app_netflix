@@ -13,10 +13,7 @@ import {
   Pressable,
   Linking,
 } from "react-native";
-
-const API_KEY = "fa8d9fb775a751a64726e7a92e2061ff";
-const BASE_URL = "https://api.themoviedb.org/3";
-const IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500";
+import { API_KEY, BASE_URL, IMAGE_BASE_URL } from "@/service/apiThemoviedb";
 
 const { width } = Dimensions.get("window");
 

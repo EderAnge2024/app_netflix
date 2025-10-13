@@ -15,24 +15,27 @@ import Perfil from '@/components/ui/otrosNav/perfil';
 import { API_KEY, BASE_URL, IMAGE_BASE_URL } from '@/service/apiThemoviedb';
 import MiLista from '@/components/ui/principales/miLista';
 
+// Definir el tipo para las props de TabIcon
+interface TabIconProps {
+  name: string;
+  color: string;
+  size?: number;
+  showBadge?: boolean;
+}
+
 export default function PrincipalScreen() {
   const [activeTab, setActiveTab] = useState('Inicio');
-  const [hasNotifications, setHasNotifications] = useState(false); // 👈 nuevo estado
+  const [hasNotifications, setHasNotifications] = useState(false);
 
-  // Simulación: obtener si hay notificaciones nuevas
-  // En producción, podrías pasar un callback desde NotificacionesScreen que haga setHasNotifications(true)
   React.useEffect(() => {
-    // Ejemplo: fetch de API de TMDb para notificaciones
     fetch(`${BASE_URL}/movie/popular?api_key=${API_KEY}&language=es-ES&page=1`)
       .then(res => res.json())
       .then(data => {
-        // Si hay películas, consideramos que hay "notificaciones"
         setHasNotifications((data.results || []).length > 0);
       })
       .catch(err => console.log(err));
   }, []);
 
-  // Configuración de las pestañas con tus componentes reales
   const textTabs = [
     { 
       id: 'Inicio', 
@@ -72,7 +75,7 @@ export default function PrincipalScreen() {
       label: 'Buscar', 
       component: SearchScreen,
       type: 'icon',
-      iconName: 'search-outline' // 👈 Nombres de Ionicons
+      iconName: 'search-outline'
     },
     { 
       id: 'Notificaciones', 
@@ -93,11 +96,11 @@ export default function PrincipalScreen() {
   const allTabs = [...textTabs, ...iconTabs];
   const ActiveComponent = allTabs.find(tab => tab.id === activeTab)?.component || HomeScreen;
 
-  // Componente para renderizar iconos con Ionicons
-  const TabIcon = ({ name, color, size = 24, showBadge = false }) => {
+  // Componente TabIcon con typado correcto
+  const TabIcon: React.FC<TabIconProps> = ({ name, color, size = 24, showBadge = false }) => {
     return (
       <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-        <Ionicons name={name} color={color} size={size} />
+        <Ionicons name={name as any} color={color} size={size} />
         {showBadge && (
           <View style={styles.badge} />
         )}
@@ -109,18 +112,41 @@ export default function PrincipalScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#141414" />
       
-      {/* Header fijo con navegación */}
-      <View style={styles.header}>        
-        {/* Navegación horizontal */}
+      {/* Header reorganizado */}
+      <View style={styles.header}>
+        {/* Logo a la izquierda */}
+        <Text style={styles.netflixLogo}>MaFre</Text>
+        
+        {/* Iconos a la derecha */}
+        <View style={styles.rightIcons}>
+          {iconTabs.map((tab) => (
+            <TouchableOpacity
+              key={tab.id}
+              style={[
+                styles.iconNavItem,
+                activeTab === tab.id && styles.iconNavItemActive
+              ]}
+              onPress={() => setActiveTab(tab.id)}
+            >
+              <TabIcon 
+                name={tab.iconName} 
+                color={activeTab === tab.id ? '#E50914' : '#fff'}
+                size={24}
+                showBadge={tab.id === 'Notificaciones' && hasNotifications}
+              />
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      {/* Navegación horizontal debajo */}
+      <View style={styles.horizontalNav}>
         <ScrollView 
           horizontal 
           showsHorizontalScrollIndicator={false} 
           style={styles.navScroll}
           contentContainerStyle={styles.navContentContainer}
         >
-          <Text style={styles.netflixLogo}>MaFre </Text>
-
-          {/* Tabs de texto */}
           {textTabs.map((tab) => (
             <TouchableOpacity
               key={tab.id}
@@ -138,32 +164,10 @@ export default function PrincipalScreen() {
               </Text>
             </TouchableOpacity>
           ))}
-          
-          {/* Separador visual */}
-          <View style={styles.separator} />
-          
-          {/* Tabs de iconos */}
-          {iconTabs.map((tab) => (
-            <TouchableOpacity
-              key={tab.id}
-              style={[
-                styles.iconNavItem,
-                activeTab === tab.id && styles.iconNavItemActive
-              ]}
-              onPress={() => setActiveTab(tab.id)}
-            >
-              <TabIcon 
-                name={tab.iconName} 
-                color={activeTab === tab.id ? '#E50914' : '#fff'}
-                size={24}
-                showBadge={tab.id === 'Notificaciones' && hasNotifications} // aquí se notifica
-              />
-            </TouchableOpacity>
-          ))}
         </ScrollView>
       </View>
 
-      {/* Contenido dinámico - Solo muestra el componente activo */}
+      {/* Contenido dinámico */}
       <View style={styles.contentContainer}>
         <ActiveComponent />
       </View>
@@ -171,7 +175,6 @@ export default function PrincipalScreen() {
   );
 }
 
-// Los estilos se mantienen igual...
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -181,25 +184,35 @@ const styles = StyleSheet.create({
     paddingTop: 50,
     paddingHorizontal: 16,
     backgroundColor: '#141414',
-    borderBottomWidth: 1,
-    borderBottomColor: '#2A2A2A',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 80,
   },
   netflixLogo: {
     color: '#E50914',
     fontSize: 28,
     fontWeight: 'bold',
-    marginBottom: 16,
+  },
+  rightIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  horizontalNav: {
+    backgroundColor: '#141414',
+    borderBottomWidth: 1,
+    borderBottomColor: '#2A2A2A',
   },
   navScroll: {
     flexGrow: 0,
   },
   navContentContainer: {
-    paddingRight: 20,
+    paddingHorizontal: 16,
     alignItems: 'center',
   },
   navItem: {
     marginRight: 20,
-    paddingVertical: 8,
+    paddingVertical: 12,
     paddingHorizontal: 4,
   },
   navItemActive: {
@@ -216,14 +229,8 @@ const styles = StyleSheet.create({
     opacity: 1,
     fontWeight: 'bold',
   },
-  separator: {
-    width: 1,
-    height: 20,
-    backgroundColor: '#404040',
-    marginHorizontal: 10,
-  },
   iconNavItem: {
-    marginRight: 15,
+    marginLeft: 15,
     paddingVertical: 8,
     paddingHorizontal: 8,
     opacity: 0.7,
@@ -231,24 +238,16 @@ const styles = StyleSheet.create({
   iconNavItemActive: {
     opacity: 1,
   },
-  iconContainer: {
-    width: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   contentContainer: {
     flex: 1,
   },
-  placeholder: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  placeholderText: {
-    color: '#fff',
-    fontSize: 18,
-    textAlign: 'center',
+  badge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#E50914',
   },
 });

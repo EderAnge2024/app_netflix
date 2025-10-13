@@ -10,25 +10,51 @@ import {
   Image,
   ScrollView,
   Keyboard,
+  ListRenderItem,
 } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { API_KEY, BASE_URL, IMAGE_BASE_URL } from "@/service/apiThemoviedb";
 
+// 🔹 Definimos los tipos
+interface SearchResult {
+  id: number;
+  media_type: 'movie' | 'tv' | 'person';
+  title?: string;
+  name?: string;
+  overview?: string;
+  poster_path?: string;
+  backdrop_path?: string;
+  profile_path?: string;
+  vote_average?: number;
+  release_date?: string;
+  first_air_date?: string;
+}
+
+interface ApiResponse<T> {
+  results: T[];
+}
+
+interface CategorySectionProps {
+  title: string;
+  data: SearchResult[];
+  renderItem: ListRenderItem<SearchResult>;
+}
+
 export default function SearchScreen() {
   const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [recentSearches, setRecentSearches] = useState([]);
-  const inputRef = useRef(null);
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState<boolean>(false);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const inputRef = useRef<TextInput>(null);
 
   // Categorizar resultados
-  const movies = searchResults.filter(item => item.media_type === 'movie');
-  const series = searchResults.filter(item => item.media_type === 'tv');
-  const people = searchResults.filter(item => item.media_type === 'person');
+  const movies: SearchResult[] = searchResults.filter(item => item.media_type === 'movie');
+  const series: SearchResult[] = searchResults.filter(item => item.media_type === 'tv');
+  const people: SearchResult[] = searchResults.filter(item => item.media_type === 'person');
 
-  const handleSearch = async (text) => {
+  const handleSearch = async (text: string): Promise<void> => {
     setSearchQuery(text);
     
     if (text.length < 2) {
@@ -42,7 +68,7 @@ export default function SearchScreen() {
       const res = await fetch(
         `${BASE_URL}/search/multi?api_key=${API_KEY}&language=es-ES&query=${encodeURIComponent(text)}`
       );
-      const data = await res.json();
+      const data: ApiResponse<SearchResult> = await res.json();
       setSearchResults(data.results || []);
       
       // Guardar búsqueda reciente
@@ -57,24 +83,24 @@ export default function SearchScreen() {
     }
   };
 
-  const clearSearch = () => {
+  const clearSearch = (): void => {
     setSearchQuery("");
     setSearchResults([]);
     Keyboard.dismiss();
   };
 
-  const goToDetails = (item) => {
+  const goToDetails = (item: SearchResult): void => {
     if (item.media_type === 'person') {
       // Navegar a pantalla de persona
       router.push({
         pathname: "/person",
-        params: { id: item.id }
+        params: { id: item.id.toString() }
       });
     } else {
       router.push({
         pathname: "/details",
         params: {
-          id: item.id,
+          id: item.id.toString(),
           title: item.title || item.name,
           overview: item.overview,
           image: item.backdrop_path,
@@ -84,7 +110,7 @@ export default function SearchScreen() {
     }
   };
 
-  const renderMovieItem = ({ item }) => (
+  const renderMovieItem: ListRenderItem<SearchResult> = ({ item }) => (
     <TouchableOpacity style={styles.resultCard} onPress={() => goToDetails(item)}>
       <Image
         source={{ uri: `${IMAGE_BASE_URL}${item.poster_path}` }}
@@ -101,7 +127,7 @@ export default function SearchScreen() {
     </TouchableOpacity>
   );
 
-  const renderPersonItem = ({ item }) => (
+  const renderPersonItem: ListRenderItem<SearchResult> = ({ item }) => (
     <TouchableOpacity style={styles.personCard} onPress={() => goToDetails(item)}>
       <Image
         source={{ uri: `${IMAGE_BASE_URL}${item.profile_path}` }}
@@ -114,7 +140,7 @@ export default function SearchScreen() {
     </TouchableOpacity>
   );
 
-  const renderCategory = (title, data, renderItem) => {
+  const renderCategory = ({ title, data, renderItem }: CategorySectionProps): JSX.Element | null => {
     if (!data || data.length === 0) return null;
     
     return (
@@ -123,7 +149,7 @@ export default function SearchScreen() {
         <FlatList
           data={data}
           renderItem={renderItem}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(item: SearchResult) => item.id.toString()}
           scrollEnabled={false}
         />
       </View>
@@ -173,7 +199,7 @@ export default function SearchScreen() {
           /* Estado inicial - Búsquedas recientes/sugerencias */
           <View style={styles.initialState}>
             <Text style={styles.sectionTitle}>Búsquedas recientes</Text>
-            {recentSearches.map((search, index) => (
+            {recentSearches.map((search: string, index: number) => (
               <TouchableOpacity 
                 key={index}
                 style={styles.recentSearchItem}
@@ -204,9 +230,9 @@ export default function SearchScreen() {
         ) : searchResults.length > 0 ? (
           /* Resultados categorizados */
           <View style={styles.resultsContainer}>
-            {renderCategory("Películas", movies, renderMovieItem)}
-            {renderCategory("Series", series, renderMovieItem)}
-            {renderCategory("Personas", people, renderPersonItem)}
+            {renderCategory({ title: "Películas", data: movies, renderItem: renderMovieItem })}
+            {renderCategory({ title: "Series", data: series, renderItem: renderMovieItem })}
+            {renderCategory({ title: "Personas", data: people, renderItem: renderPersonItem })}
           </View>
         ) : (
           /* Sin resultados */
