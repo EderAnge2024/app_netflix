@@ -230,7 +230,7 @@ export default function SeriesSection({}: SeriesSectionProps) {
       <ScrollView>
         {/* 🎬 Serie destacada */}
         {featuredSerie && (
-          <TouchableOpacity style={styles.featuredContainer} onPress={() => openModal(featuredSerie)}>
+          <View style={styles.featuredContainer}>
             <Image
               source={{
                 uri: `${IMAGE_BASE_URL}${featuredSerie.backdrop_path || featuredSerie.poster_path}`,
@@ -257,7 +257,7 @@ export default function SeriesSection({}: SeriesSectionProps) {
                 </Pressable>
               </View>
             </View>
-          </TouchableOpacity>
+          </View>
         )}
 
         {/* 🔹 Series por género */}
