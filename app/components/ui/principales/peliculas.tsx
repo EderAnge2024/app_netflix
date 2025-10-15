@@ -2,12 +2,12 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
-  FlatList,
   Image,
-  TouchableOpacity,
   StyleSheet,
-  ScrollView,
+  FlatList,
+  TouchableOpacity,
   ActivityIndicator,
+  ScrollView,
   Modal,
   Dimensions,
 } from "react-native";
@@ -18,61 +18,70 @@ const { width } = Dimensions.get("window");
 export default function PeliculasScreen() {
   const [genres, setGenres] = useState([]);
   const [moviesByGenre, setMoviesByGenre] = useState({});
-  const [loading, setLoading] = useState(true);
+  const [selectedGenre, setSelectedGenre] = useState(null);
   const [featuredMovie, setFeaturedMovie] = useState(null);
-  const [selectedMovie, setSelectedMovie] = useState(null); // Para modal
+  const [loading, setLoading] = useState(true);
+  const [dropdownVisible, setDropdownVisible] = useState(false);
+  const [selectedMovie, setSelectedMovie] = useState(null);
 
-  // Cargar géneros
+  // 🔹 Obtener géneros
   const fetchGenres = async () => {
     try {
-      const res = await fetch(
-        `${BASE_URL}/genre/movie/list?api_key=${API_KEY}&language=es-ES`
-      );
+      const res = await fetch(`${BASE_URL}/genre/movie/list?api_key=${API_KEY}&language=es-ES`);
       const data = await res.json();
       setGenres(data.genres || []);
+      if (data.genres.length > 0) setSelectedGenre(data.genres[0]);
     } catch (error) {
       console.error("Error al obtener géneros:", error);
     }
   };
 
-  // Cargar películas por género
+  // 🔹 Obtener películas por género
   const fetchMoviesByGenre = async (genreId) => {
     try {
-      const res = await fetch(
-        `${BASE_URL}/discover/movie?api_key=${API_KEY}&language=es-ES&with_genres=${genreId}`
-      );
+      const res = await fetch(`${BASE_URL}/discover/movie?api_key=${API_KEY}&language=es-ES&with_genres=${genreId}`);
       const data = await res.json();
       return data.results || [];
     } catch (error) {
-      console.error(`Error al obtener películas del género ${genreId}:`, error);
+      console.error("Error al obtener películas:", error);
       return [];
     }
   };
 
-  // Cargar datos iniciales
+  // 🔹 Cargar datos
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       await fetchGenres();
-
-      const movieMap = {};
-      for (const genre of genres) {
-        const movies = await fetchMoviesByGenre(genre.id);
-        movieMap[genre.name] = movies;
-      }
-      setMoviesByGenre(movieMap);
-
-      // Película destacada: primera película del primer género
-      const firstGenreMovies = Object.values(movieMap)[0];
-      if (firstGenreMovies && firstGenreMovies.length > 0) {
-        setFeaturedMovie(firstGenreMovies[0]);
-      }
-
-      setLoading(false);
     };
-
     loadData();
-  }, [genres.length]);
+  }, []);
+
+  useEffect(() => {
+    const loadMovies = async () => {
+      if (genres.length > 0) {
+        const map = {};
+        for (const genre of genres) {
+          const movies = await fetchMoviesByGenre(genre.id);
+          map[genre.name] = movies;
+        }
+        setMoviesByGenre(map);
+
+        const firstGenre = genres[0];
+        if (map[firstGenre.name]?.length > 0) {
+          setFeaturedMovie(map[firstGenre.name][0]);
+        }
+        setLoading(false);
+      }
+    };
+    loadMovies();
+  }, [genres]);
+
+  useEffect(() => {
+    if (selectedGenre && moviesByGenre[selectedGenre.name]?.length > 0) {
+      setFeaturedMovie(moviesByGenre[selectedGenre.name][0]);
+    }
+  }, [selectedGenre, moviesByGenre]);
 
   const renderMovieCard = ({ item }) => (
     <TouchableOpacity style={styles.card} onPress={() => setSelectedMovie(item)}>
@@ -99,41 +108,84 @@ export default function PeliculasScreen() {
     );
   }
 
+  // 🔹 Ordenar géneros: el seleccionado primero
+  const orderedGenres = selectedGenre
+    ? [selectedGenre.name, ...Object.keys(moviesByGenre).filter((g) => g !== selectedGenre.name)]
+    : Object.keys(moviesByGenre);
+
   return (
-    <ScrollView style={styles.container}>
-      {/* Portada destacada */}
-      {featuredMovie && (
-        <TouchableOpacity onPress={() => setSelectedMovie(featuredMovie)}>
-          <Image
-            source={{
-              uri: `${IMAGE_BASE_URL}${featuredMovie.backdrop_path || featuredMovie.poster_path}`,
-            }}
-            style={styles.featuredImage}
-          />
-          <View style={styles.overlay}>
-            <Text style={styles.featuredTitle}>{featuredMovie.title}</Text>
-            <Text style={styles.featuredOverview} numberOfLines={3}>
-              {featuredMovie.overview}
+    <View style={styles.container}>
+      {/* 🔹 Menú de géneros (compacto a la izquierda) */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => setDropdownVisible(!dropdownVisible)}>
+          <View style={styles.menuButton}>
+            <Text style={styles.headerTitle}>
+              {selectedGenre ? selectedGenre.name : "Seleccione un género"} ▼
             </Text>
           </View>
         </TouchableOpacity>
-      )}
 
-      <Text style={styles.mainTitle}>Películas por género</Text>
+        {dropdownVisible && (
+          <View style={styles.dropdownMenu}>
+            {genres.map((genre) => (
+              <TouchableOpacity
+                key={genre.id}
+                style={styles.dropdownItem}
+                onPress={() => {
+                  setSelectedGenre(genre);
+                  setDropdownVisible(false);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.dropdownText,
+                    selectedGenre?.id === genre.id && styles.dropdownTextActive,
+                  ]}
+                >
+                  {genre.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </View>
 
-      {/* Películas por categoría */}
-      {Object.entries(moviesByGenre).map(([genre, movies]) => (
-        <View key={genre} style={styles.section}>
-          <Text style={styles.sectionTitle}>{genre}</Text>
-          <FlatList
-            data={movies}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            keyExtractor={(item) => item.id.toString()}
-            renderItem={renderMovieCard}
-          />
-        </View>
-      ))}
+      {/* 🔹 Contenido principal */}
+      <ScrollView style={styles.scrollContainer}>
+        {/* Película destacada */}
+        {featuredMovie && (
+          <TouchableOpacity onPress={() => setSelectedMovie(featuredMovie)}>
+            <Image
+              source={{
+                uri: `${IMAGE_BASE_URL}${featuredMovie.backdrop_path || featuredMovie.poster_path}`,
+              }}
+              style={styles.featuredImage}
+            />
+            <View style={styles.overlay}>
+              <Text style={styles.featuredTitle}>{featuredMovie.title}</Text>
+              <Text style={styles.featuredOverview} numberOfLines={3}>
+                {featuredMovie.overview}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        )}
+
+        <Text style={styles.mainTitle}>Películas por género</Text>
+
+        {/* Películas agrupadas */}
+        {orderedGenres.map((genreName) => (
+          <View key={genreName} style={styles.section}>
+            <Text style={styles.sectionTitle}>{genreName}</Text>
+            <FlatList
+              data={moviesByGenre[genreName]}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={(item) => item.id.toString()}
+              renderItem={renderMovieCard}
+            />
+          </View>
+        ))}
+      </ScrollView>
 
       {/* Modal de detalles */}
       <Modal
@@ -169,19 +221,43 @@ export default function PeliculasScreen() {
           )}
         </View>
       </Modal>
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#141414", paddingTop: 50, paddingHorizontal: 10 },
+  container: { flex: 1, backgroundColor: "#141414" },
+  scrollContainer: { flex: 1, paddingTop: 10 },
   loader: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#141414" },
-  mainTitle: { color: "#fff", fontSize: 28, fontWeight: "bold", marginBottom: 15 },
-  section: { marginBottom: 25 },
-  sectionTitle: { color: "#fff", fontSize: 20, fontWeight: "bold", marginBottom: 10, marginLeft: 5 },
-  card: { marginRight: 10, alignItems: "center" },
-  poster: { width: 120, height: 180, borderRadius: 8 },
-  movieTitle: { color: "#fff", fontSize: 12, marginTop: 5, width: 120, textAlign: "center" },
+
+  // 🔹 Menú
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#141414",
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    zIndex: 10,
+  },
+  menuButton: { flexDirection: "row", alignItems: "center" },
+  headerTitle: { color: "#fff", fontSize: 18, fontWeight: "bold" },
+
+  dropdownMenu: {
+    position: "absolute",
+    top: 45,
+    left: 15,
+    backgroundColor: "#1c1c1c",
+    borderRadius: 6,
+    paddingVertical: 5,
+    width: 160,
+    elevation: 8,
+    zIndex: 20,
+  },
+  dropdownItem: { paddingVertical: 8, paddingHorizontal: 12 },
+  dropdownText: { color: "#ccc", fontSize: 15 },
+  dropdownTextActive: { color: "#fff", fontWeight: "bold" },
+
+  // 🔹 Banner principal
   featuredImage: { width: "100%", height: 220, borderRadius: 10, marginBottom: 15 },
   overlay: {
     position: "absolute",
@@ -194,7 +270,15 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 10,
   },
   featuredTitle: { color: "#fff", fontSize: 20, fontWeight: "bold", marginBottom: 5 },
-  featuredOverview: { color: "#fff", fontSize: 12, marginBottom: 10 },
+  featuredOverview: { color: "#fff", fontSize: 12 },
+
+  mainTitle: { color: "#fff", fontSize: 24, fontWeight: "bold", margin: 15 },
+  section: { marginBottom: 25 },
+  sectionTitle: { color: "#fff", fontSize: 18, fontWeight: "bold", marginLeft: 15, marginBottom: 10 },
+  card: { marginRight: 10, alignItems: "center" },
+  poster: { width: 120, height: 180, borderRadius: 8 },
+  movieTitle: { color: "#fff", fontSize: 12, marginTop: 5, width: 120, textAlign: "center" },
+
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "center", alignItems: "center", padding: 20 },
   modalContent: { width: width - 40, backgroundColor: "#222", borderRadius: 10, padding: 20, alignItems: "center" },
   modalTitle: { color: "#fff", fontSize: 22, fontWeight: "bold", marginBottom: 10, textAlign: "center" },

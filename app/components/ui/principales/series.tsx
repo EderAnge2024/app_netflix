@@ -26,13 +26,13 @@ export default function SeriesSection() {
   const [loading, setLoading] = useState(true);
   const [dropdownVisible, setDropdownVisible] = useState(false);
 
-  // 🔹 Modal de info serie
   const [selectedSerie, setSelectedSerie] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
 
-  // 🔹 Modal del tráiler
   const [trailerVisible, setTrailerVisible] = useState(false);
   const [trailerKey, setTrailerKey] = useState(null);
+  
+  const [myList, setMyList] = useState([]);
 
   const fetchGenres = async () => {
     try {
@@ -76,6 +76,24 @@ export default function SeriesSection() {
     } else {
       Alert.alert("Tráiler no disponible", "Esta serie no tiene tráiler disponible.");
     }
+  };
+
+  const addToMyList = (serie) => {
+    const isInList = myList.some((item) => item.id === serie.id);
+    
+    if (isInList) {
+      // Remover de la lista
+      setMyList(myList.filter((item) => item.id !== serie.id));
+      Alert.alert("Removido", `${serie.name} se eliminó de tu lista.`);
+    } else {
+      // Agregar a la lista
+      setMyList([...myList, serie]);
+      Alert.alert("Agregado", `${serie.name} se agregó a tu lista.`);
+    }
+  };
+
+  const isInMyList = (serieId) => {
+    return myList.some((item) => item.id === serieId);
   };
 
   useEffect(() => {
@@ -150,8 +168,6 @@ export default function SeriesSection() {
     <View style={styles.container}>
       {/* 🔹 Header Netflix */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Inicio</Text>
-
         <TouchableOpacity onPress={() => setDropdownVisible(!dropdownVisible)}>
           <View style={styles.seriesMenuButton}>
             <Text style={styles.headerTitle}>
@@ -159,37 +175,36 @@ export default function SeriesSection() {
             </Text>
           </View>
         </TouchableOpacity>
-
-        {/* 🔽 Menú desplegable */}
-        {dropdownVisible && (
-          <View style={styles.dropdownMenu}>
-            {genres.map((genre) => (
-              <TouchableOpacity
-                key={genre.id}
-                style={styles.dropdownItem}
-                onPress={() => {
-                  setSelectedGenre(genre);
-                  setDropdownVisible(false);
-                }}
-              >
-                <Text
-                  style={[
-                    styles.dropdownText,
-                    selectedGenre?.id === genre.id && styles.dropdownTextActive,
-                  ]}
-                >
-                  {genre.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
       </View>
+
+      {dropdownVisible && (
+        <View style={styles.dropdownMenu}>
+          {genres.map((genre) => (
+            <TouchableOpacity
+              key={genre.id}
+              style={styles.dropdownItem}
+              onPress={() => {
+                setSelectedGenre(genre);
+                setDropdownVisible(false);
+              }}
+            >
+              <Text
+                style={[
+                  styles.dropdownText,
+                  selectedGenre?.id === genre.id && styles.dropdownTextActive,
+                ]}
+              >
+                {genre.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       <ScrollView>
         {/* 🎬 Serie destacada */}
         {featuredSerie && (
-          <TouchableOpacity style={styles.featuredContainer} onPress={() => openModal(featuredSerie)}>
+          <View style={styles.featuredContainer}>
             <Image
               source={{
                 uri: `${IMAGE_BASE_URL}${featuredSerie.backdrop_path || featuredSerie.poster_path}`,
@@ -197,21 +212,26 @@ export default function SeriesSection() {
               style={styles.featuredImage}
               resizeMode="cover"
             />
-            <View style={styles.overlay}>
+
+            <View style={styles.featuredInfoContainer}>
               <Text style={styles.featuredTitle}>{featuredSerie.name}</Text>
-              <Text style={styles.featuredOverview} numberOfLines={3}>
+              <Text style={styles.featuredDetails}>
+                ⭐ {featuredSerie.vote_average?.toFixed(1) || "N/A"}   |   🗓 {featuredSerie.first_air_date || "Sin fecha"}
+              </Text>
+              <Text style={styles.featuredOverview} numberOfLines={4}>
                 {featuredSerie.overview || "Sin descripción disponible."}
               </Text>
+
               <View style={styles.featuredButtonsRow}>
                 <Pressable style={styles.featuredButton} onPress={() => openModal(featuredSerie)}>
                   <Text style={styles.featuredButtonText}>Ver más</Text>
                 </Pressable>
                 <Pressable style={styles.featuredButtonPlay} onPress={() => openTrailer(featuredSerie.id)}>
-                  <Text style={styles.featuredButtonText}>▶ Reproducir</Text>
+                  <Text style={styles.featuredButtonPlayText}>▶ Reproducir</Text>
                 </Pressable>
               </View>
             </View>
-          </TouchableOpacity>
+          </View>
         )}
 
         {/* 🔹 Series por género */}
@@ -248,15 +268,14 @@ export default function SeriesSection() {
                 {selectedSerie.overview || "Sin descripción disponible."}
               </Text>
 
-              {/* 🔹 Botones dentro del modal */}
               <View style={styles.modalButtonsContainer}>
                 <Pressable
-                  style={styles.addButton}
-                  onPress={() => {
-                    Alert.alert("Agregado a tu lista", `${selectedSerie.name} se agregó a tu lista.`);
-                  }}
+                  style={[styles.addButton, isInMyList(selectedSerie.id) && styles.addButtonActive]}
+                  onPress={() => addToMyList(selectedSerie)}
                 >
-                  <Text style={styles.addButtonText}>+ Mi Lista</Text>
+                  <Text style={styles.addButtonText}>
+                    {isInMyList(selectedSerie.id) ? "✓ En Mi Lista" : "+ Mi Lista"}
+                  </Text>
                 </Pressable>
 
                 <Pressable style={styles.trailerButton} onPress={() => openTrailer(selectedSerie.id)}>
@@ -304,7 +323,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#141414",
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
     paddingHorizontal: 15,
     paddingVertical: 12,
     zIndex: 20,
@@ -315,7 +334,7 @@ const styles = StyleSheet.create({
   dropdownMenu: {
     position: "absolute",
     top: 50,
-    right: 15,
+    left: 15,
     backgroundColor: "#1c1c1c",
     borderRadius: 6,
     paddingVertical: 5,
@@ -327,33 +346,68 @@ const styles = StyleSheet.create({
   dropdownText: { color: "#ccc", fontSize: 15 },
   dropdownTextActive: { color: "#fff", fontWeight: "bold" },
 
-  featuredContainer: { width: "100%", height: 340, marginBottom: 20 },
-  featuredImage: { width: "100%", height: "100%", borderRadius: 10 },
-  overlay: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 20,
-    paddingVertical: 25,
-    backgroundColor: "rgba(0,0,0,0.55)",
+  // 🔹 Banner tipo inicio
+  featuredContainer: {
+    width: "100%",
+    height: 500,
+    marginBottom: 20,
+    position: "relative",
   },
-  featuredTitle: { color: "#fff", fontSize: 24, fontWeight: "bold" },
-  featuredOverview: { color: "#fff", fontSize: 14 },
-  featuredButtonsRow: { flexDirection: "row", gap: 10, marginTop: 10 },
+  featuredImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 0,
+  },
+  featuredInfoContainer: {
+    position: "absolute",
+    bottom: 40,
+    left: 25,
+    right: 25,
+  },
+  featuredTitle: {
+    color: "#fff",
+    fontSize: 28,
+    fontWeight: "bold",
+    marginBottom: 8,
+  },
+  featuredDetails: {
+    color: "#ffcc00",
+    fontSize: 14,
+    marginBottom: 10,
+  },
+  featuredOverview: {
+    color: "#fff",
+    fontSize: 15,
+    marginBottom: 15,
+    lineHeight: 20,
+  },
+  featuredButtonsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
   featuredButton: {
     backgroundColor: "#E50914",
     paddingVertical: 10,
-    paddingHorizontal: 18,
+    paddingHorizontal: 20,
     borderRadius: 5,
+  },
+  featuredButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 14,
   },
   featuredButtonPlay: {
     backgroundColor: "#fff",
     paddingVertical: 10,
-    paddingHorizontal: 18,
+    paddingHorizontal: 20,
     borderRadius: 5,
   },
-  featuredButtonText: { color: "#000", fontWeight: "bold", fontSize: 14 },
+  featuredButtonPlayText: {
+    color: "#000",
+    fontWeight: "bold",
+    fontSize: 14,
+  },
 
   section: { marginBottom: 30 },
   sectionTitle: {
@@ -380,6 +434,7 @@ const styles = StyleSheet.create({
   modalOverview: { color: "#ddd", fontSize: 14, lineHeight: 20, textAlign: "center" },
   modalButtonsContainer: { flexDirection: "row", justifyContent: "center", marginTop: 15, gap: 10 },
   addButton: { backgroundColor: "#333", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
+  addButtonActive: { backgroundColor: "#E50914" },
   addButtonText: { color: "#fff", fontWeight: "bold", fontSize: 14 },
   trailerButton: { backgroundColor: "#E50914", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
   trailerButtonText: { color: "#fff", fontWeight: "bold", fontSize: 14 },
