@@ -11,7 +11,20 @@ async function ensureTableExists() {
       correo VARCHAR(150) UNIQUE NOT NULL
     );
   `;
-  await pool.query(query);
+
+  // 🔄 NUEVA tabla para códigos de verificación
+  const verificationCodesTable = `
+    CREATE TABLE IF NOT EXISTS verification_codes (
+      id SERIAL PRIMARY KEY,
+      correo VARCHAR(150) NOT NULL,
+      codigo VARCHAR(6) NOT NULL,
+      expiracion TIMESTAMP NOT NULL,
+      usado BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    `;
+    await pool.query(query);
+    await pool.query(verificationCodesTable);
 }
 
 // Ejecutar al cargar el módulo
@@ -51,4 +64,49 @@ export async function updatePassword(correo, nuevaContrasena) {
     [nuevaContrasena, correo]
   );
   return result.rows[0];
+}
+
+// Generar código de verificación
+export async function createVerificationCode(correo, codigo) {
+  // Eliminar códigos antiguos del mismo correo
+  await pool.query(
+    "DELETE FROM verification_codes WHERE correo = $1",
+    [correo]
+  );
+
+  // Crear nuevo código con expiración de 10 minutos
+  const expiracion = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
+  
+  const result = await pool.query(
+    "INSERT INTO verification_codes (correo, codigo, expiracion) VALUES ($1, $2, $3) RETURNING *",
+    [correo, codigo, expiracion]
+  );
+  return result.rows[0];
+}
+
+// Verificar código
+export async function verifyCode(correo, codigo) {
+  const result = await pool.query(
+    "SELECT * FROM verification_codes WHERE correo = $1 AND codigo = $2 AND usado = FALSE AND expiracion > NOW()",
+    [correo, codigo]
+  );
+  
+  if (result.rows.length === 0) {
+    return null;
+  }
+  
+  // Marcar código como usado
+  await pool.query(
+    "UPDATE verification_codes SET usado = TRUE WHERE id = $1",
+    [result.rows[0].id]
+  );
+  
+  return result.rows[0];
+}
+
+// Limpiar códigos expirados
+export async function cleanExpiredCodes() {
+  await pool.query(
+    "DELETE FROM verification_codes WHERE expiracion < NOW() OR usado = TRUE"
+  );
 }
