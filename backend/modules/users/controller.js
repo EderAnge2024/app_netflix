@@ -1,18 +1,53 @@
 import { createUser, findUser, findUserByEmail, updatePassword, createVerificationCode, verifyCode, cleanExpiredCodes } from "./model.js";
-//const nodemailer =  require('nodemailer')
+import nodemailer from 'nodemailer'
+import dotenv from 'dotenv'
 
-// 📧 Simulador de envío de mensajes (agrega esto al principio del archivo)
+dotenv.config(); // para leer variable de entorno
+
+// 📧 Función REAL para enviar correos
 const sendVerificationCode = async (correo, codigo) => {
-  console.log(`📧 Código de verificación para ${correo}: ${codigo}`);
-  // Aquí integrarías con tu servicio de mensajería
-  
-  // Por ahora solo simulamos el envío
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      console.log(`✅ Código enviado a: ${correo}`);
-      resolve(true);
-    }, 1000);
-  });
+  try {
+    // Configurar el transporter con TU contraseña de aplicación
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.GMAIL_USER,  // ← Tu correo en .env
+        pass: process.env.GMAIL_APP_PASSWORD  // ← Tu contraseña SIN espacios en .env
+      }
+    });
+
+    // Configurar el contenido del correo
+    const mailOptions = {
+      from: `"Sistema de Verificación" <${process.env.GMAIL_USER}>`,
+      to: correo,
+      subject: '🔐 Código de Verificación - Recuperación de Contraseña',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #2563eb; text-align: center;">Recuperación de Contraseña</h2>
+          <p>Hola,</p>
+          <p>Has solicitado restablecer tu contraseña. Usa el siguiente código para verificar tu identidad:</p>
+          <div style="background: #f3f4f6; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; margin: 25px 0; letter-spacing: 8px; border-radius: 8px;">
+            ${codigo}
+          </div>
+          <p>Este código expirará en <strong>10 minutos</strong>.</p>
+          <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
+            Si no solicitaste este código, por favor ignora este mensaje.
+          </p>
+        </div>
+      `
+    };
+
+    // Enviar el correo
+    const result = await transporter.sendMail(mailOptions);
+    console.log(`✅ Correo REAL enviado a: ${correo}`);
+    console.log(`📫 ID del mensaje: ${result.messageId}`);
+    
+    return { success: true, messageId: result.messageId };
+    
+  } catch (error) {
+    console.error('❌ Error enviando correo REAL:', error);
+    throw new Error(`No se pudo enviar el correo: ${error.message}`);
+  }
 };
 
 export async function register(req, res) {
