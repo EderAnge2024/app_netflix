@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Tipo del item
-interface MediaItem {
+export interface MediaItem {
   id: number;
   title?: string;
   name?: string;
@@ -11,6 +11,8 @@ interface MediaItem {
   overview?: string;
   vote_average?: number;
   release_date?: string;
+  first_air_date?: string;  // Añadimos esta propiedad para las series
+  media_type?: 'movie' | 'tv';  // También es útil añadir el tipo de medio
 }
 
 interface MyListContextProps {

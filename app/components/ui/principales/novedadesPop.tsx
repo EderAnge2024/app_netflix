@@ -12,28 +12,25 @@ import {
   Modal,
   Pressable,
   Linking,
+  Alert,
 } from "react-native";
-
-const API_KEY = "fa8d9fb775a751a64726e7a92e2061ff";
-const BASE_URL = "https://api.themoviedb.org/3";
-const IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500";
+import { API_KEY, BASE_URL, IMAGE_BASE_URL } from "@/service/apiThemoviedb";
+import { useMyList, MediaItem } from "@/components/ui/logeadoDatos/MyListContext";
 
 const { width } = Dimensions.get("window");
 
-// 🔹 Definimos un tipo para películas y series
-type MovieOrSeries = {
-  id: number;
+// 🔹 Extendemos MediaItem para películas y series
+interface MovieOrSeries extends MediaItem {
   title?: string;
   name?: string;
-  poster_path?: string;
-  backdrop_path?: string;
-  overview?: string;
-  vote_average?: number;
   release_date?: string;
   first_air_date?: string;
-};
+}
 
 export default function NovedadesPopulares() {
+  // 🔹 Contexto de Mi Lista
+  const { addToMyList, removeFromMyList, isInMyList, loading: listLoading } = useMyList();
+
   const [trending, setTrending] = useState<MovieOrSeries[]>([]);
   const [popularMovies, setPopularMovies] = useState<MovieOrSeries[]>([]);
   const [popularSeries, setPopularSeries] = useState<MovieOrSeries[]>([]);
@@ -70,6 +67,22 @@ export default function NovedadesPopulares() {
     fetchData();
   }, []);
 
+  // ✅ Función para manejar Mi Lista
+  const handleMyList = async (item: MovieOrSeries): Promise<void> => {
+    try {
+      if (isInMyList(item.id)) {
+        await removeFromMyList(item);
+        Alert.alert("✅ Removido", `${item.title || item.name} se eliminó de tu lista.`);
+      } else {
+        await addToMyList(item);
+        Alert.alert("✅ Agregado", `${item.title || item.name} se agregó a tu lista.`);
+      }
+    } catch (error) {
+      console.error("Error al actualizar mi lista:", error);
+      Alert.alert("❌ Error", "No se pudo actualizar tu lista.");
+    }
+  };
+
   // 🔹 Abrir modal y buscar trailer
   const openModal = async (item: MovieOrSeries) => {
     setSelectedItem(item);
@@ -89,6 +102,13 @@ export default function NovedadesPopulares() {
     }
   };
 
+  // 🔹 Cerrar modal
+  const closeModal = (): void => {
+    setModalVisible(false);
+    setSelectedItem(null);
+    setTrailerKey(null);
+  };
+
   // 🔹 Render de cada tarjeta
   const renderItem = ({ item }: { item: MovieOrSeries }) => (
     <TouchableOpacity style={styles.card} onPress={() => openModal(item)}>
@@ -104,7 +124,7 @@ export default function NovedadesPopulares() {
     </TouchableOpacity>
   );
 
-  if (loading) {
+  if (loading || listLoading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#E50914" />
@@ -175,7 +195,7 @@ export default function NovedadesPopulares() {
       </ScrollView>
 
       {/* Modal */}
-      <Modal visible={modalVisible} animationType="slide" transparent>
+      <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={closeModal}>
         <View style={styles.modalBackground}>
           {selectedItem && (
             <View style={styles.modalContainer}>
@@ -191,16 +211,33 @@ export default function NovedadesPopulares() {
               </Text>
               <Text style={styles.modalOverview}>{selectedItem.overview || "Sin descripción disponible."}</Text>
 
-              {trailerKey && (
-                <TouchableOpacity
-                  style={[styles.featuredButton, { marginTop: 10 }]}
-                  onPress={() => Linking.openURL(`https://www.youtube.com/watch?v=${trailerKey}`)}
+              {/* 🔹 Botones de acción */}
+              <View style={styles.modalButtonsContainer}>
+                {/* Botón Mi Lista */}
+                <Pressable
+                  style={[
+                    styles.myListButton,
+                    isInMyList(selectedItem.id) && styles.myListButtonActive
+                  ]}
+                  onPress={() => handleMyList(selectedItem)}
                 >
-                  <Text style={styles.featuredButtonText}>Ver Trailer</Text>
-                </TouchableOpacity>
-              )}
+                  <Text style={styles.myListButtonText}>
+                    {isInMyList(selectedItem.id) ? "Eliminar de Mi Lista" : "Agregar a Mi Lista"}
+                  </Text>
+                </Pressable>
 
-              <Pressable style={styles.modalCloseButton} onPress={() => setModalVisible(false)}>
+                {/* Botón Ver Tráiler */}
+                {trailerKey && (
+                  <Pressable
+                    style={styles.trailerButton}
+                    onPress={() => Linking.openURL(`https://www.youtube.com/watch?v=${trailerKey}`)}
+                  >
+                    <Text style={styles.trailerButtonText}> Ver Tráiler</Text>
+                  </Pressable>
+                )}
+              </View>
+
+              <Pressable style={styles.modalCloseButton} onPress={closeModal}>
                 <Text style={styles.modalCloseText}>Cerrar</Text>
               </Pressable>
             </View>
@@ -226,18 +263,111 @@ const styles = StyleSheet.create({
 
   featuredContainer: { width: "100%", height: 220, marginBottom: 20, position: "relative" },
   featuredImage: { width: "100%", height: "100%", borderRadius: 10 },
-  overlay: { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: "rgba(0,0,0,0.5)", padding: 15, borderBottomLeftRadius: 10, borderBottomRightRadius: 10 },
+  overlay: { 
+    position: "absolute", 
+    bottom: 0, 
+    left: 0, 
+    right: 0, 
+    backgroundColor: "rgba(0,0,0,0.5)", 
+    padding: 15, 
+    borderBottomLeftRadius: 10, 
+    borderBottomRightRadius: 10 
+  },
   featuredTitle: { color: "#fff", fontSize: 20, fontWeight: "bold", marginBottom: 5 },
   featuredOverview: { color: "#fff", fontSize: 12, marginBottom: 10 },
-  featuredButton: { backgroundColor: "#E50914", paddingVertical: 8, paddingHorizontal: 15, borderRadius: 5, alignSelf: "flex-start" },
+  featuredButton: { 
+    backgroundColor: "#E50914", 
+    paddingVertical: 8, 
+    paddingHorizontal: 15, 
+    borderRadius: 5, 
+    alignSelf: "flex-start" 
+  },
   featuredButtonText: { color: "#fff", fontWeight: "bold", fontSize: 14 },
 
-  modalBackground: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "center", padding: 20 },
-  modalContainer: { backgroundColor: "#222", borderRadius: 10, padding: 20, alignItems: "center" },
-  modalImage: { width: width - 80, height: 200, borderRadius: 10, marginBottom: 15 },
-  modalTitle: { color: "#fff", fontSize: 24, fontWeight: "bold", marginBottom: 8, textAlign: "center" },
-  modalInfo: { color: "#ccc", fontSize: 14, marginBottom: 10 },
-  modalOverview: { color: "#ddd", fontSize: 14, lineHeight: 20, textAlign: "center" },
-  modalCloseButton: { marginTop: 15, backgroundColor: "#E50914", paddingVertical: 10, paddingHorizontal: 25, borderRadius: 8 },
-  modalCloseText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
+  modalBackground: { 
+    flex: 1, 
+    backgroundColor: "rgba(0,0,0,0.8)", 
+    justifyContent: "center", 
+    padding: 20 
+  },
+  modalContainer: { 
+    backgroundColor: "#222", 
+    borderRadius: 10, 
+    padding: 20, 
+    alignItems: "center" 
+  },
+  modalImage: { 
+    width: width - 80, 
+    height: 200, 
+    borderRadius: 10, 
+    marginBottom: 15 
+  },
+  modalTitle: { 
+    color: "#fff", 
+    fontSize: 24, 
+    fontWeight: "bold", 
+    marginBottom: 8, 
+    textAlign: "center" 
+  },
+  modalInfo: { 
+    color: "#ccc", 
+    fontSize: 14, 
+    marginBottom: 10 
+  },
+  modalOverview: { 
+    color: "#ddd", 
+    fontSize: 14, 
+    lineHeight: 20, 
+    textAlign: "center" 
+  },
+
+  // 🔹 Nuevos estilos para botones del modal
+  modalButtonsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    marginTop: 15,
+    marginBottom: 10
+  },
+  myListButton: {
+    flex: 1,
+    backgroundColor: "#E50914",
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    marginRight: 10, // separación entre botones (reemplaza 'gap')
+  },
+  myListButtonActive: {
+    backgroundColor: "#2d2d2dff",
+  },
+  myListButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 14,
+    textAlign: "center",
+  },
+  trailerButton: {
+    flex: 1,
+    backgroundColor: "#E50914",
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  trailerButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 14,
+  },
+  modalCloseButton: { 
+    marginTop: 10, 
+    backgroundColor: "#E50914", 
+    paddingVertical: 10, 
+    paddingHorizontal: 25, 
+    borderRadius: 8 
+  },
+  modalCloseText: { 
+    color: "#fff", 
+    fontWeight: "bold", 
+    fontSize: 16 
+  },
 });

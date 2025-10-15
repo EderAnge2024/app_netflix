@@ -25,7 +25,7 @@ interface TabIconProps {
 
 export default function PrincipalScreen() {
   const [activeTab, setActiveTab] = useState('Inicio');
-  const [hasNotifications, setHasNotifications] = useState(false); 
+  const [hasNotifications, setHasNotifications] = useState(false);
 
   React.useEffect(() => {
     fetch(`${BASE_URL}/movie/popular?api_key=${API_KEY}&language=es-ES&page=1`)
@@ -249,5 +249,5 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: '#E50914',
-  },
+  },
 });

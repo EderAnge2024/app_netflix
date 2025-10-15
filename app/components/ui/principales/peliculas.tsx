@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { JSX, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -10,96 +10,194 @@ import {
   ScrollView,
   Modal,
   Dimensions,
+  Alert,
+  Pressable,
+  Linking,
 } from "react-native";
 import { API_KEY, BASE_URL, IMAGE_BASE_URL } from "@/service/apiThemoviedb";
+import { useMyList, MediaItem } from "@/components/ui/logeadoDatos/MyListContext";
+import { WebView } from "react-native-webview";
 
 const { width } = Dimensions.get("window");
 
-export default function PeliculasScreen() {
-  const [genres, setGenres] = useState([]);
-  const [moviesByGenre, setMoviesByGenre] = useState({});
-  const [selectedGenre, setSelectedGenre] = useState(null);
-  const [featuredMovie, setFeaturedMovie] = useState(null);
+interface Genre {
+  id: number;
+  name: string;
+}
+
+interface Movie extends MediaItem {
+  title?: string;
+  backdrop_path?: string;
+  poster_path?: string;
+  overview?: string;
+  vote_average?: number;
+  release_date?: string;
+}
+
+type MoviesByGenre = Record<string, Movie[]>;
+
+export default function PeliculasScreen(): JSX.Element {
+  // Contexto Mi Lista
+  const { addToMyList, removeFromMyList, isInMyList, loading: listLoading } = useMyList() as any;
+
+  const [genres, setGenres] = useState<Genre[]>([]);
+  const [moviesByGenre, setMoviesByGenre] = useState<MoviesByGenre>({});
+  const [selectedGenre, setSelectedGenre] = useState<Genre | null>(null);
+  const [featuredMovie, setFeaturedMovie] = useState<Movie | null>(null);
   const [loading, setLoading] = useState(true);
   const [dropdownVisible, setDropdownVisible] = useState(false);
-  const [selectedMovie, setSelectedMovie] = useState(null);
 
-  // 🔹 Obtener géneros
-  const fetchGenres = async () => {
+  // Modal / selección
+  const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [trailerKey, setTrailerKey] = useState<string | null>(null);
+  const [fetchingTrailer, setFetchingTrailer] = useState(false);
+
+  // Obtener géneros
+  const fetchGenres = async (): Promise<void> => {
     try {
       const res = await fetch(`${BASE_URL}/genre/movie/list?api_key=${API_KEY}&language=es-ES`);
       const data = await res.json();
-      setGenres(data.genres || []);
-      if (data.genres.length > 0) setSelectedGenre(data.genres[0]);
+      const g: Genre[] = data?.genres || [];
+      setGenres(g);
+      if (g.length > 0) setSelectedGenre((prev) => prev ?? g[0]);
     } catch (error) {
       console.error("Error al obtener géneros:", error);
     }
   };
 
-  // 🔹 Obtener películas por género
-  const fetchMoviesByGenre = async (genreId) => {
+  // Obtener películas por género
+  const fetchMoviesByGenre = async (genreId: number): Promise<Movie[]> => {
     try {
-      const res = await fetch(`${BASE_URL}/discover/movie?api_key=${API_KEY}&language=es-ES&with_genres=${genreId}`);
+      const res = await fetch(
+        `${BASE_URL}/discover/movie?api_key=${API_KEY}&language=es-ES&with_genres=${genreId}`
+      );
       const data = await res.json();
-      return data.results || [];
+      return data?.results || [];
     } catch (error) {
-      console.error("Error al obtener películas:", error);
+      console.error("Error al obtener películas por género:", error);
       return [];
     }
   };
 
-  // 🔹 Cargar datos
+  // Cargar géneros inicialmente
   useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      await fetchGenres();
-    };
-    loadData();
+    setLoading(true);
+    fetchGenres().finally(() => {
+      // no terminar loading aquí porque cargaremos películas después
+    });
   }, []);
 
+  // Cargar películas cuando tengamos géneros
   useEffect(() => {
-    const loadMovies = async () => {
-      if (genres.length > 0) {
-        const map = {};
-        for (const genre of genres) {
-          const movies = await fetchMoviesByGenre(genre.id);
-          map[genre.name] = movies;
-        }
-        setMoviesByGenre(map);
-
-        const firstGenre = genres[0];
-        if (map[firstGenre.name]?.length > 0) {
-          setFeaturedMovie(map[firstGenre.name][0]);
-        }
+    const loadMovies = async (): Promise<void> => {
+      if (!genres || genres.length === 0) {
         setLoading(false);
+        return;
       }
+
+      const map: MoviesByGenre = {};
+      for (const genre of genres) {
+        const movies = await fetchMoviesByGenre(genre.id);
+        map[genre.name] = movies;
+      }
+      setMoviesByGenre(map);
+
+      // seleccionar película destacada del primer género si no hay selección
+      const firstGenre = genres[0];
+      if (firstGenre && map[firstGenre.name]?.length > 0) {
+        setFeaturedMovie(map[firstGenre.name][0]);
+      } else {
+        setFeaturedMovie(null);
+      }
+
+      setLoading(false);
     };
+
     loadMovies();
   }, [genres]);
 
+  // Si cambia selección de género, actualizar featuredMovie
   useEffect(() => {
     if (selectedGenre && moviesByGenre[selectedGenre.name]?.length > 0) {
       setFeaturedMovie(moviesByGenre[selectedGenre.name][0]);
     }
   }, [selectedGenre, moviesByGenre]);
 
-  const renderMovieCard = ({ item }) => (
-    <TouchableOpacity style={styles.card} onPress={() => setSelectedMovie(item)}>
+  // Manejar Mi Lista (agregar / remover)
+  const handleMyList = async (movie: Movie): Promise<void> => {
+    try {
+      if (isInMyList?.(movie.id)) {
+        await removeFromMyList?.(movie);
+        Alert.alert("✅ Removido", `${movie.title || movie.name} se eliminó de tu lista.`);
+      } else {
+        await addToMyList?.(movie);
+        Alert.alert("✅ Agregado", `${movie.title || movie.name} se agregó a tu lista.`);
+      }
+    } catch (err) {
+      console.error("Error al actualizar Mi Lista:", err);
+      Alert.alert("❌ Error", "No se pudo actualizar tu lista.");
+    }
+  };
+
+  // Buscar trailer (Youtube) y abrir modal
+  const openModal = async (movie: Movie): Promise<void> => {
+    setSelectedMovie(movie);
+    setModalVisible(true);
+    // buscar trailer
+    setTrailerKey(null);
+    setFetchingTrailer(true);
+    try {
+      const res = await fetch(`${BASE_URL}/movie/${movie.id}/videos?api_key=${API_KEY}&language=es-ES`);
+      const data = await res.json();
+      const trailer = data?.results?.find((v: any) => v?.type === "Trailer" && v?.site === "YouTube");
+      setTrailerKey(trailer ? trailer.key : null);
+    } catch (err) {
+      console.error("Error buscando trailer:", err);
+      setTrailerKey(null);
+    } finally {
+      setFetchingTrailer(false);
+    }
+  };
+
+  // Abrir trailer en YouTube (fallback)
+  const openTrailer = async (movieId: number): Promise<void> => {
+    try {
+      // Intentar usar el trailerKey ya buscado
+      if (trailerKey) {
+        Linking.openURL(`https://www.youtube.com/watch?v=${trailerKey}`);
+        return;
+      }
+      // Si no hay trailerKey, buscarlo rápido
+      const res = await fetch(`${BASE_URL}/movie/${movieId}/videos?api_key=${API_KEY}&language=es-ES`);
+      const data = await res.json();
+      const trailer = data?.results?.find((v: any) => v?.type === "Trailer" && v?.site === "YouTube");
+      if (trailer?.key) {
+        Linking.openURL(`https://www.youtube.com/watch?v=${trailer.key}`);
+      } else {
+        Alert.alert("Tráiler no disponible", "No se encontró un tráiler para esta película.");
+      }
+    } catch (err) {
+      console.error("Error al abrir tráiler:", err);
+      Alert.alert("Error", "No se pudo abrir el tráiler.");
+    }
+  };
+
+  const renderMovieCard = ({ item }: { item: Movie }) => (
+    <TouchableOpacity style={styles.card} onPress={() => openModal(item)}>
       <Image
         source={{
-          uri: item.poster_path
-            ? `${IMAGE_BASE_URL}${item.poster_path}`
-            : "https://via.placeholder.com/120x180.png?text=Sin+Imagen",
+          uri: item.poster_path ? `${IMAGE_BASE_URL}${item.poster_path}` : "https://via.placeholder.com/120x180.png?text=Sin+Imagen",
         }}
         style={styles.poster}
       />
       <Text style={styles.movieTitle} numberOfLines={1}>
-        {item.title}
+        {item.title || item.name}
       </Text>
     </TouchableOpacity>
   );
 
-  if (loading) {
+  if (loading || listLoading) {
     return (
       <View style={styles.loader}>
         <ActivityIndicator size="large" color="#E50914" />
@@ -108,14 +206,14 @@ export default function PeliculasScreen() {
     );
   }
 
-  // 🔹 Ordenar géneros: el seleccionado primero
+  // Ordenar géneros con el seleccionado primero (si hay)
   const orderedGenres = selectedGenre
     ? [selectedGenre.name, ...Object.keys(moviesByGenre).filter((g) => g !== selectedGenre.name)]
     : Object.keys(moviesByGenre);
 
   return (
     <View style={styles.container}>
-      {/* 🔹 Menú de géneros (compacto a la izquierda) */}
+      {/* Menú de géneros */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => setDropdownVisible(!dropdownVisible)}>
           <View style={styles.menuButton}>
@@ -150,11 +248,10 @@ export default function PeliculasScreen() {
         )}
       </View>
 
-      {/* 🔹 Contenido principal */}
       <ScrollView style={styles.scrollContainer}>
         {/* Película destacada */}
         {featuredMovie && (
-          <TouchableOpacity onPress={() => setSelectedMovie(featuredMovie)}>
+          <TouchableOpacity onPress={() => openModal(featuredMovie)}>
             <Image
               source={{
                 uri: `${IMAGE_BASE_URL}${featuredMovie.backdrop_path || featuredMovie.poster_path}`,
@@ -177,7 +274,7 @@ export default function PeliculasScreen() {
           <View key={genreName} style={styles.section}>
             <Text style={styles.sectionTitle}>{genreName}</Text>
             <FlatList
-              data={moviesByGenre[genreName]}
+              data={moviesByGenre[genreName] || []}
               horizontal
               showsHorizontalScrollIndicator={false}
               keyExtractor={(item) => item.id.toString()}
@@ -189,34 +286,64 @@ export default function PeliculasScreen() {
 
       {/* Modal de detalles */}
       <Modal
-        visible={!!selectedMovie}
-        transparent
+        visible={modalVisible}
         animationType="slide"
-        onRequestClose={() => setSelectedMovie(null)}
+        transparent
+        onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
           {selectedMovie && (
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>{selectedMovie.title}</Text>
               <Image
                 source={{
                   uri: `${IMAGE_BASE_URL}${selectedMovie.backdrop_path || selectedMovie.poster_path}`,
                 }}
                 style={styles.modalImage}
               />
+
+              <Text style={styles.modalTitle}>{selectedMovie.title}</Text>
+
               <Text style={styles.modalInfo}>
                 ⭐ {selectedMovie.vote_average?.toFixed(1) || "N/A"} | 🗓{" "}
                 {selectedMovie.release_date || "Fecha no disponible"}
               </Text>
+
               <Text style={styles.modalOverview}>
                 {selectedMovie.overview || "Sin descripción disponible."}
               </Text>
-              <TouchableOpacity
+
+              {/* Botones */}
+              <View style={styles.modalButtonsContainer}>
+                <Pressable
+                  style={[
+                    styles.myListButton,
+                    isInMyList?.(selectedMovie.id) && styles.myListButtonActive,
+                  ]}
+                  onPress={() => handleMyList(selectedMovie)}
+                >
+                  <Text style={styles.myListButtonText}>
+                    {isInMyList?.(selectedMovie.id) ? "Eliminar de Mi Lista" : "Agregar a Mi Lista"}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.trailerButton}
+                  onPress={() => openTrailer(selectedMovie.id)}
+                >
+                  <Text style={styles.trailerButtonText}> Ver Tráiler</Text>
+                </Pressable>
+              </View>
+
+              <Pressable
                 style={styles.closeButton}
-                onPress={() => setSelectedMovie(null)}
+                onPress={() => {
+                  setModalVisible(false);
+                  setSelectedMovie(null);
+                  setTrailerKey(null);
+                }}
               >
                 <Text style={styles.closeButtonText}>Cerrar</Text>
-              </TouchableOpacity>
+              </Pressable>
             </View>
           )}
         </View>
@@ -230,7 +357,7 @@ const styles = StyleSheet.create({
   scrollContainer: { flex: 1, paddingTop: 10 },
   loader: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#141414" },
 
-  // 🔹 Menú
+  // Menú
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -257,7 +384,7 @@ const styles = StyleSheet.create({
   dropdownText: { color: "#ccc", fontSize: 15 },
   dropdownTextActive: { color: "#fff", fontWeight: "bold" },
 
-  // 🔹 Banner principal
+  // Banner principal
   featuredImage: { width: "100%", height: 220, borderRadius: 10, marginBottom: 15 },
   overlay: {
     position: "absolute",
@@ -287,4 +414,42 @@ const styles = StyleSheet.create({
   modalOverview: { color: "#ddd", fontSize: 14, marginBottom: 15, textAlign: "center", lineHeight: 20 },
   closeButton: { backgroundColor: "#E50914", paddingVertical: 8, borderRadius: 5, alignItems: "center", width: "50%" },
   closeButtonText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
+
+  // botones modal
+  modalButtonsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    marginTop: 15,
+    marginBottom: 10,
+  },
+  myListButton: {
+    flex: 1,
+    backgroundColor: "#E50914",
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    marginRight: 10,
+  },
+  myListButtonActive: {
+    backgroundColor: "#2d2d2dff",
+  },
+  myListButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 14,
+    textAlign: "center",
+  },
+  trailerButton: {
+    flex: 1,
+    backgroundColor: "#E50914",
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  trailerButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 14,
+  },
 });

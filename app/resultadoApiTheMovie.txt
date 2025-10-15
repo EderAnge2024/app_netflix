@@ -1,0 +1,20 @@
+{
+  "adult": false,
+  "backdrop_path": "/path_to_backdrop.jpg",
+  "genre_ids": [28, 12, 16],
+  "id": 12345,
+  "media_type": "movie", 
+  "original_language": "en",
+  "original_title": "The Batman",
+  "overview": "In his second year of fighting crime, Batman uncovers corruption...",
+  "popularity": 650.123,
+  "poster_path": "/path_to_poster.jpg",
+  "release_date": "2022-03-01",
+  "title": "The Batman",
+  "video": false,
+  "vote_average": 8.1,
+  "vote_count": 9231,
+  "name": "The Batman",               
+  "first_air_date": "2022-03-01",    
+  "origin_country": ["US"]
+}
