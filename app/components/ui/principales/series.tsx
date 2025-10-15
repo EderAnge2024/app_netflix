@@ -13,6 +13,7 @@ import {
   Dimensions,
   Alert,
 } from "react-native";
+import { WebView } from "react-native-webview";
 import { API_KEY, BASE_URL, IMAGE_BASE_URL } from "@/service/apiThemoviedb";
 import { WebView } from "react-native-webview";
 import { useMyList, MediaItem } from "@/components/ui/logeadoDatos/MyListContext";
@@ -87,8 +88,8 @@ export default function SeriesSection({}: SeriesSectionProps) {
       const trailer = data.results.find((v: Video) => v.type === "Trailer" && v.site === "YouTube");
       return trailer ? trailer.key : null;
     } catch (error) {
-      console.error("Error al obtener tráiler:", error);
-      return null;
+      console.error("Error al cargar tráiler:", error);
+      setTrailerUrl(null);
     }
   };
 
@@ -179,83 +180,30 @@ export default function SeriesSection({}: SeriesSectionProps) {
 
   if (loading || listLoading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={styles.loaderContainer}>
         <ActivityIndicator size="large" color="#E50914" />
-        <Text style={styles.loadingText}>Cargando series...</Text>
+        <Text style={styles.loaderText}>Cargando series...</Text>
       </View>
     );
   }
 
-  const orderedGenres = selectedGenre
-    ? [selectedGenre.name, ...Object.keys(seriesByGenre).filter((g) => g !== selectedGenre.name)]
-    : Object.keys(seriesByGenre);
-
   return (
-    <View style={styles.container}>
-      {/* 🔹 Header Netflix */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => setDropdownVisible(!dropdownVisible)}>
-          <View style={styles.seriesMenuButton}>
-            <Text style={styles.headerTitle}>
-              {selectedGenre ? selectedGenre.name : "Series"} ▼
-            </Text>
-          </View>
-        </TouchableOpacity>
-      </View>
-
-      {dropdownVisible && (
-        <View style={styles.dropdownMenu}>
-          {genres.map((genre) => (
-            <TouchableOpacity
-              key={genre.id}
-              style={styles.dropdownItem}
-              onPress={() => {
-                setSelectedGenre(genre);
-                setDropdownVisible(false);
-              }}
-            >
-              <Text
-                style={[
-                  styles.dropdownText,
-                  selectedGenre?.id === genre.id && styles.dropdownTextActive,
-                ]}
-              >
-                {genre.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-
-      <ScrollView>
-        {/* 🎬 Serie destacada */}
-        {featuredSerie && (
-          <View style={styles.featuredContainer}>
+    <ScrollView style={styles.container}>
+      {/* 🔹 Banner principal */}
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        style={styles.bannerContainer}
+      >
+        {popularSeries.slice(0, 5).map((serie) => (
+          <TouchableOpacity key={serie.id} onPress={() => handleShowDetails(serie)}>
             <Image
-              source={{
-                uri: `${IMAGE_BASE_URL}${featuredSerie.backdrop_path || featuredSerie.poster_path}`,
-              }}
-              style={styles.featuredImage}
-              resizeMode="cover"
+              source={{ uri: `${IMAGE_BASE_URL}${serie.backdrop_path}` }}
+              style={styles.bannerImage}
             />
-
-            <View style={styles.featuredInfoContainer}>
-              <Text style={styles.featuredTitle}>{featuredSerie.name}</Text>
-              <Text style={styles.featuredDetails}>
-                ⭐ {featuredSerie.vote_average?.toFixed(1) || "N/A"}   |   🗓 {featuredSerie.first_air_date || "Sin fecha"}
-              </Text>
-              <Text style={styles.featuredOverview} numberOfLines={4}>
-                {featuredSerie.overview || "Sin descripción disponible."}
-              </Text>
-
-              <View style={styles.featuredButtonsRow}>
-                <Pressable style={styles.featuredButton} onPress={() => openModal(featuredSerie)}>
-                  <Text style={styles.featuredButtonText}>Ver más</Text>
-                </Pressable>
-                <Pressable style={styles.featuredButtonPlay} onPress={() => openTrailer(featuredSerie.id)}>
-                  <Text style={styles.featuredButtonPlayText}>▶ Reproducir</Text>
-                </Pressable>
-              </View>
+            <View style={styles.bannerOverlay}>
+              <Text style={styles.bannerTitle}>{serie.name}</Text>
             </View>
           </View>
         )}
@@ -275,15 +223,47 @@ export default function SeriesSection({}: SeriesSectionProps) {
         ))}
       </ScrollView>
 
-      {/* 🔹 Modal de información de serie */}
-      <Modal visible={modalVisible} animationType="fade" transparent onRequestClose={() => setModalVisible(false)}>
-        <View style={styles.modalBackground}>
-          {selectedSerie && (
-            <View style={styles.modalContainer}>
+      {/* 🔹 Lista de series populares */}
+      <Text style={styles.sectionTitle}>Series Populares</Text>
+      <FlatList
+        horizontal
+        data={popularSeries}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={({ item }) => (
+          <TouchableOpacity onPress={() => handleShowDetails(item)}>
+            <Image
+              source={{ uri: `${IMAGE_BASE_URL}${item.poster_path}` }}
+              style={styles.posterImage}
+            />
+          </TouchableOpacity>
+        )}
+        showsHorizontalScrollIndicator={false}
+      />
+
+      {/* 🔹 Lista de series mejor valoradas */}
+      <Text style={styles.sectionTitle}>Mejor Valoradas</Text>
+      <FlatList
+        horizontal
+        data={series}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={({ item }) => (
+          <TouchableOpacity onPress={() => handleShowDetails(item)}>
+            <Image
+              source={{ uri: `${IMAGE_BASE_URL}${item.poster_path}` }}
+              style={styles.posterImage}
+            />
+          </TouchableOpacity>
+        )}
+        showsHorizontalScrollIndicator={false}
+      />
+
+      {/* 🔹 Modal de detalles */}
+      {selectedSerie && (
+        <Modal visible={modalVisible} animationType="slide" transparent={true}>
+          <View style={styles.modalContainer}>
+            <ScrollView contentContainerStyle={styles.modalContent}>
               <Image
-                source={{
-                  uri: `${IMAGE_BASE_URL}${selectedSerie.backdrop_path || selectedSerie.poster_path}`,
-                }}
+                source={{ uri: `${IMAGE_BASE_URL}${selectedSerie.backdrop_path}` }}
                 style={styles.modalImage}
               />
               <Text style={styles.modalTitle}>{selectedSerie.name}</Text>
@@ -308,130 +288,128 @@ export default function SeriesSection({}: SeriesSectionProps) {
                   </Text>
                 </Pressable>
 
-                <Pressable style={styles.trailerButton} onPress={() => openTrailer(selectedSerie.id)}>
-                  <Text style={styles.trailerButtonText}>▶ Ver tráiler</Text>
+                <Pressable
+                  style={styles.closeButton}
+                  onPress={() => setModalVisible(false)}
+                >
+                  <Text style={styles.buttonText}>Cerrar</Text>
                 </Pressable>
               </View>
 
-              <Pressable style={styles.modalCloseButton} onPress={() => setModalVisible(false)}>
-                <Text style={styles.modalCloseText}>Cerrar</Text>
-              </Pressable>
-            </View>
-          )}
-        </View>
-      </Modal>
-
-      {/* 🎥 Modal del tráiler */}
-      <Modal visible={trailerVisible} animationType="slide" transparent onRequestClose={() => setTrailerVisible(false)}>
-        <View style={styles.trailerModalBackground}>
-          <View style={styles.trailerContainer}>
-            {trailerKey ? (
-              <WebView
-                source={{ uri: `https://www.youtube.com/embed/${trailerKey}?autoplay=1` }}
-                style={{ flex: 1, borderRadius: 10 }}
-                allowsFullscreenVideo
-              />
-            ) : (
-              <Text style={{ color: "#fff" }}>Cargando tráiler...</Text>
-            )}
-            <Pressable style={styles.trailerCloseButton} onPress={() => setTrailerVisible(false)}>
-              <Text style={styles.trailerCloseText}>Cerrar</Text>
-            </Pressable>
+              {trailerUrl && (
+                <View style={styles.trailerContainer}>
+                  <WebView
+                    source={{ uri: trailerUrl }}
+                    style={styles.trailer}
+                    allowsFullscreenVideo
+                  />
+                </View>
+              )}
+            </ScrollView>
           </View>
-        </View>
-      </Modal>
-    </View>
+        </Modal>
+      )}
+    </ScrollView>
   );
-}
+};
+
+export default SeriesScreen;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#141414" },
-  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-  loadingText: { color: "#fff", marginTop: 10 },
-
-  header: {
-    backgroundColor: "#141414",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-start",
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    zIndex: 20,
+  container: {
+    flex: 1,
+    backgroundColor: "#000",
   },
-  headerTitle: { color: "#fff", fontSize: 18, fontWeight: "bold" },
-  seriesMenuButton: { flexDirection: "row", alignItems: "center" },
-
-  dropdownMenu: {
+  bannerContainer: {
+    width,
+    height: 220,
+  },
+  bannerImage: {
+    width,
+    height: 220,
+    resizeMode: "cover",
+  },
+  bannerOverlay: {
     position: "absolute",
-    top: 50,
-    left: 15,
-    backgroundColor: "#1c1c1c",
-    borderRadius: 6,
-    paddingVertical: 5,
-    width: 160,
-    elevation: 10,
-    zIndex: 30,
-  },
-  dropdownItem: { paddingVertical: 8, paddingHorizontal: 12 },
-  dropdownText: { color: "#ccc", fontSize: 15 },
-  dropdownTextActive: { color: "#fff", fontWeight: "bold" },
-
-  // 🔹 Banner tipo inicio
-  featuredContainer: {
+    bottom: 0,
     width: "100%",
-    height: 500,
-    marginBottom: 20,
-    position: "relative",
+    padding: 12,
+    backgroundColor: "rgba(0,0,0,0.5)",
   },
-  featuredImage: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 0,
-  },
-  featuredInfoContainer: {
-    position: "absolute",
-    bottom: 40,
-    left: 25,
-    right: 25,
-  },
-  featuredTitle: {
+  bannerTitle: {
     color: "#fff",
-    fontSize: 28,
+    fontSize: 18,
     fontWeight: "bold",
-    marginBottom: 8,
   },
-  featuredDetails: {
-    color: "#ffcc00",
+  sectionTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "bold",
+    marginHorizontal: 10,
+    marginTop: 15,
+    marginBottom: 5,
+  },
+  posterImage: {
+    width: 130,
+    height: 190,
+    marginHorizontal: 6,
+    borderRadius: 6,
+  },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#000",
+  },
+  loaderText: {
+    color: "#fff",
+    marginTop: 10,
+    fontSize: 16,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.95)",
+    justifyContent: "center",
+  },
+  modalContent: {
+    padding: 15,
+    alignItems: "center",
+  },
+  modalImage: {
+    width: "100%",
+    height: 200,
+    borderRadius: 10,
+  },
+  modalTitle: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "bold",
+    marginVertical: 10,
+    textAlign: "center",
+  },
+  modalOverview: {
+    color: "#ddd",
     fontSize: 14,
+    textAlign: "justify",
     marginBottom: 10,
   },
-  featuredOverview: {
-    color: "#fff",
-    fontSize: 15,
-    marginBottom: 15,
-    lineHeight: 20,
-  },
-  featuredButtonsRow: {
+  modalButtons: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+    justifyContent: "space-around",
+    width: "100%",
+    marginBottom: 15,
   },
-  featuredButton: {
+  myListButton: {
     backgroundColor: "#E50914",
     paddingVertical: 10,
     paddingHorizontal: 20,
-    borderRadius: 5,
+    borderRadius: 8,
   },
-  featuredButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 14,
-  },
-  featuredButtonPlay: {
-    backgroundColor: "#fff",
+  closeButton: {
+    backgroundColor: "#555",
     paddingVertical: 10,
     paddingHorizontal: 20,
-    borderRadius: 5,
+    borderRadius: 8,
   },
   featuredButtonPlayText: {
     color: "#000",
@@ -443,7 +421,6 @@ const styles = StyleSheet.create({
   section: { marginBottom: 30 },
   sectionTitle: {
     color: "#fff",
-    fontSize: 18,
     fontWeight: "bold",
     marginLeft: 15,
     marginBottom: 10,
@@ -485,20 +462,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   trailerContainer: {
-    width: width - 40,
-    height: 250,
-    backgroundColor: "#000",
-    borderRadius: 10,
-    overflow: "hidden",
+    width: "100%",
+    height: 200,
+    marginTop: 10,
   },
-  trailerCloseButton: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    backgroundColor: "#E50914",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
+  trailer: {
+    flex: 1,
   },
-  trailerCloseText: { color: "#fff", fontWeight: "bold" },
 });

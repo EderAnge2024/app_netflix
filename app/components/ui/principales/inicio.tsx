@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -10,10 +10,11 @@ import {
   Modal,
   Pressable,
   Dimensions,
-  ListRenderItem,
+  ActivityIndicator,
   Linking,
   Alert,
 } from "react-native";
+import { WebView } from "react-native-webview";
 import { API_KEY, BASE_URL, IMAGE_BASE_URL } from "@/service/apiThemoviedb";
 import { useMyList } from "@/components/ui/logeadoDatos/MyListContext";
 
@@ -42,22 +43,38 @@ export default function HomeScreen(): JSX.Element {
   const { addToMyList, removeFromMyList, isInMyList, loading: listLoading } =
     useMyList() as MyListContextType;
 
-  const [featured, setFeatured] = useState<MediaItem | null>(null);
+  const [featuredList, setFeaturedList] = useState<MediaItem[]>([]);
+  const [featuredIndex, setFeaturedIndex] = useState(0);
   const [movies, setMovies] = useState<MediaItem[]>([]);
   const [series, setSeries] = useState<MediaItem[]>([]);
-  const [trending, setTrending] = useState<MediaItem[]>([]);
+  const [pageMovies, setPageMovies] = useState(1);
+  const [pageSeries, setPageSeries] = useState(1);
   const [loading, setLoading] = useState<boolean>(true);
-  const [trailerKey, setTrailerKey] = useState<string | null>(null);
-
   const [selectedItem, setSelectedItem] = useState<MediaItem | null>(null);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const [trailerKey, setTrailerKey] = useState<string | null>(null);
+  const [isTrailerLoading, setIsTrailerLoading] = useState(false);
+
+  const bannerRef = useRef<FlatList>(null);
+
+  // Auto-scroll del banner
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setFeaturedIndex((prev) => {
+        const next = (prev + 1) % featuredList.length;
+        bannerRef.current?.scrollToIndex({ index: next, animated: true });
+        return next;
+      });
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [featuredList]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const [moviesRes, seriesRes, trendingRes] = await Promise.all([
-          fetch(`${BASE_URL}/movie/popular?api_key=${API_KEY}&language=es-ES`),
-          fetch(`${BASE_URL}/tv/popular?api_key=${API_KEY}&language=es-ES`),
+          fetch(`${BASE_URL}/movie/popular?api_key=${API_KEY}&language=es-ES&page=1`),
+          fetch(`${BASE_URL}/tv/popular?api_key=${API_KEY}&language=es-ES&page=1`),
           fetch(`${BASE_URL}/trending/all/day?api_key=${API_KEY}&language=es-ES`),
         ]);
 
@@ -67,24 +84,36 @@ export default function HomeScreen(): JSX.Element {
 
         setMovies(moviesData.results || []);
         setSeries(seriesData.results || []);
-        setTrending(trendingData.results || []);
-        setFeatured(trendingData.results?.[0] || null);
+        setFeaturedList(trendingData.results?.slice(0, 5) || []);
       } catch (error) {
         console.error("Error cargando datos:", error);
       } finally {
         setLoading(false);
       }
     };
-
     fetchData();
   }, []);
+
+  const fetchMoreMovies = async () => {
+    const nextPage = pageMovies + 1;
+    const res = await fetch(`${BASE_URL}/movie/popular?api_key=${API_KEY}&language=es-ES&page=${nextPage}`);
+    const data = await res.json();
+    setMovies((prev) => [...prev, ...data.results]);
+    setPageMovies(nextPage);
+  };
+
+  const fetchMoreSeries = async () => {
+    const nextPage = pageSeries + 1;
+    const res = await fetch(`${BASE_URL}/tv/popular?api_key=${API_KEY}&language=es-ES&page=${nextPage}`);
+    const data = await res.json();
+    setSeries((prev) => [...prev, ...data.results]);
+    setPageSeries(nextPage);
+  };
 
   const fetchTrailer = async (item: MediaItem) => {
     try {
       const type = item.title ? "movie" : "tv";
-      const res = await fetch(
-        `${BASE_URL}/${type}/${item.id}/videos?api_key=${API_KEY}&language=es-ES`
-      );
+      const res = await fetch(`${BASE_URL}/${type}/${item.id}/videos?api_key=${API_KEY}&language=es-ES`);
       const data = await res.json();
       const trailer = data.results?.find(
         (vid: any) => vid.type === "Trailer" && vid.site === "YouTube"
@@ -99,20 +128,48 @@ export default function HomeScreen(): JSX.Element {
   const openModal = async (item: MediaItem) => {
     setSelectedItem(item);
     setModalVisible(true);
+    setIsTrailerLoading(true);
     const key = await fetchTrailer(item);
     setTrailerKey(key);
+    setIsTrailerLoading(false);
   };
 
-  const playTrailer = async (item: MediaItem) => {
-    const key = await fetchTrailer(item);
-    if (key) {
-      Linking.openURL(`https://www.youtube.com/watch?v=${key}`);
-    } else {
-      Alert.alert("Tráiler no disponible", "Este título no tiene tráiler disponible.");
-    }
-  };
+  if (loading || listLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#E50914" />
+        <Text style={styles.loadingText}>Cargando contenido...</Text>
+      </View>
+    );
+  }
 
-  const renderItem: ListRenderItem<MediaItem> = ({ item }) => (
+  const renderBanner = ({ item }: { item: MediaItem }) => (
+    <View style={styles.bannerSlide}>
+      {item.backdrop_path && (
+        <Image
+          source={{ uri: `${IMAGE_BASE_URL}${item.backdrop_path}` }}
+          style={styles.bannerImage}
+        />
+      )}
+      <View style={styles.bannerOverlay} />
+      <View style={styles.bannerTextContainer}>
+        <Text style={styles.bannerTitle}>{item.title || item.name}</Text>
+        <Text style={styles.bannerDesc} numberOfLines={3}>
+          {item.overview || "Sin descripción disponible."}
+        </Text>
+        <View style={styles.bannerButtonsRow}>
+          <TouchableOpacity style={styles.bannerButton} onPress={() => openModal(item)}>
+            <Text style={styles.bannerButtonText}>Ver más</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.bannerButtonPlay} onPress={() => openModal(item)}>
+            <Text style={styles.bannerButtonPlayText}>▶ Reproducir</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+
+  const renderItem = ({ item }: { item: MediaItem }) => (
     <TouchableOpacity style={styles.card} onPress={() => openModal(item)}>
       {item.poster_path && (
         <Image
@@ -123,62 +180,21 @@ export default function HomeScreen(): JSX.Element {
     </TouchableOpacity>
   );
 
-  if (loading || listLoading) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.loadingText}>Cargando...</Text>
-      </View>
-    );
-  }
-
   return (
     <View style={{ flex: 1, backgroundColor: "#141414" }}>
       <ScrollView style={styles.container}>
-        {/* 🎬 Banner principal */}
-        {featured && (
-          <View style={styles.banner}>
-            {featured.backdrop_path && (
-              <Image
-                source={{ uri: `${IMAGE_BASE_URL}${featured.backdrop_path}` }}
-                style={styles.bannerImage}
-              />
-            )}
-            <View style={styles.bannerOverlay} />
-            <View style={styles.bannerTextContainer}>
-              <Text style={styles.bannerTitle}>
-                {featured.title || featured.name}
-              </Text>
-              <Text style={styles.bannerInfo}>
-                ⭐ {featured.vote_average?.toFixed(1) || "N/A"} | 🗓{" "}
-                {featured.release_date ||
-                  featured.first_air_date ||
-                  "No disponible"}
-              </Text>
-              <Text style={styles.bannerDesc} numberOfLines={3}>
-                {featured.overview || "Sin descripción disponible."}
-              </Text>
+        {/* 🔹 Banner tipo carrusel */}
+        <FlatList
+          ref={bannerRef}
+          data={featuredList}
+          renderItem={renderBanner}
+          keyExtractor={(item) => item.id.toString()}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+        />
 
-              {/* 🔹 Botones en banner */}
-              <View style={styles.bannerButtonsRow}>
-                <TouchableOpacity
-                  style={styles.bannerButton}
-                  onPress={() => openModal(featured)}
-                >
-                  <Text style={styles.bannerButtonText}>Ver más</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.bannerButtonPlay}
-                  onPress={() => playTrailer(featured)}
-                >
-                  <Text style={styles.bannerButtonPlayText}>▶ Reproducir</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* 🔥 Secciones */}
+        {/* 🔹 Secciones */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Películas populares</Text>
           <FlatList
@@ -187,6 +203,8 @@ export default function HomeScreen(): JSX.Element {
             keyExtractor={(item) => item.id.toString()}
             horizontal
             showsHorizontalScrollIndicator={false}
+            onEndReached={fetchMoreMovies}
+            onEndReachedThreshold={0.5}
           />
         </View>
 
@@ -198,17 +216,8 @@ export default function HomeScreen(): JSX.Element {
             keyExtractor={(item) => item.id.toString()}
             horizontal
             showsHorizontalScrollIndicator={false}
-          />
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Tendencias del día</Text>
-          <FlatList
-            data={trending}
-            renderItem={renderItem}
-            keyExtractor={(item) => item.id.toString()}
-            horizontal
-            showsHorizontalScrollIndicator={false}
+            onEndReached={fetchMoreSeries}
+            onEndReachedThreshold={0.5}
           />
         </View>
       </ScrollView>
@@ -223,38 +232,29 @@ export default function HomeScreen(): JSX.Element {
         <View style={styles.modalBackground}>
           {selectedItem && (
             <View style={styles.modalContainer}>
-              {selectedItem.backdrop_path && (
-                <Image
-                  source={{
-                    uri: `${IMAGE_BASE_URL}${
-                      selectedItem.backdrop_path || selectedItem.poster_path
-                    }`,
-                  }}
-                  style={styles.modalImage}
-                />
+              <Text style={styles.modalTitle}>{selectedItem.title || selectedItem.name}</Text>
+              {isTrailerLoading ? (
+                <ActivityIndicator color="#E50914" style={{ marginVertical: 15 }} />
+              ) : trailerKey ? (
+                <View style={styles.trailerContainer}>
+                  <WebView
+                    source={{ uri: `https://www.youtube.com/embed/${trailerKey}` }}
+                    allowsFullscreenVideo
+                    style={{ borderRadius: 10 }}
+                  />
+                </View>
+              ) : (
+                <Text style={styles.noTrailer}>Tráiler no disponible</Text>
               )}
-              <Text style={styles.modalTitle}>
-                {selectedItem.title || selectedItem.name}
-              </Text>
-              <Text style={styles.modalInfo}>
-                ⭐ {selectedItem.vote_average?.toFixed(1) || "N/A"} | 🗓{" "}
-                {selectedItem.release_date ||
-                  selectedItem.first_air_date ||
-                  "No disponible"}
-              </Text>
+
               <Text style={styles.modalOverview}>
                 {selectedItem.overview || "Sin descripción disponible."}
               </Text>
 
-              {/* 🔹 Botón Mi Lista */}
               <TouchableOpacity
                 style={[
                   styles.myListButton,
-                  {
-                    backgroundColor: isInMyList(selectedItem.id)
-                      ? "#444"
-                      : "#E50914",
-                  },
+                  { backgroundColor: isInMyList(selectedItem.id) ? "#444" : "#E50914" },
                 ]}
                 onPress={() => {
                   if (isInMyList(selectedItem.id)) {
@@ -270,19 +270,6 @@ export default function HomeScreen(): JSX.Element {
                     : "Agregar a Mi Lista"}
                 </Text>
               </TouchableOpacity>
-
-              {trailerKey && (
-                <TouchableOpacity
-                  style={styles.trailerButton}
-                  onPress={() =>
-                    Linking.openURL(
-                      `https://www.youtube.com/watch?v=${trailerKey}`
-                    )
-                  }
-                >
-                  <Text style={styles.trailerText}>Ver Tráiler</Text>
-                </TouchableOpacity>
-              )}
 
               <Pressable
                 style={styles.modalCloseButton}
@@ -303,17 +290,21 @@ export default function HomeScreen(): JSX.Element {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#141414" },
-  loadingText: { color: "#fff", marginTop: 10, textAlign: "center", fontSize: 18 },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#141414",
+  },
+  loadingText: { color: "#fff", marginTop: 15, fontSize: 18 },
 
   // Banner
-  banner: { height: 500, position: "relative", marginBottom: 25 },
+  bannerSlide: { width, height: 450, position: "relative" },
   bannerImage: { width: "100%", height: "100%", position: "absolute" },
   bannerOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.4)" },
   bannerTextContainer: { position: "absolute", bottom: 60, left: 20, right: 20 },
-  bannerTitle: { color: "#fff", fontSize: 32, fontWeight: "bold", marginBottom: 8 },
-  bannerInfo: { color: "#ccc", fontSize: 16, marginBottom: 12 },
-  bannerDesc: { color: "#ddd", fontSize: 14, marginBottom: 20, lineHeight: 20 },
-
+  bannerTitle: { color: "#fff", fontSize: 28, fontWeight: "bold", marginBottom: 10 },
+  bannerDesc: { color: "#ddd", fontSize: 14, marginBottom: 15 },
   bannerButtonsRow: { flexDirection: "row", gap: 10 },
   bannerButton: {
     backgroundColor: "#E50914",
@@ -336,18 +327,48 @@ const styles = StyleSheet.create({
   poster: { width: 120, height: 180, borderRadius: 8 },
 
   // Modal
-  modalBackground: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "center", padding: 20 },
-  modalContainer: { backgroundColor: "#222", borderRadius: 10, padding: 20, alignItems: "center" },
-  modalImage: { width: width - 80, height: 200, borderRadius: 10, marginBottom: 15 },
-  modalTitle: { color: "#fff", fontSize: 24, fontWeight: "bold", marginBottom: 8, textAlign: "center" },
-  modalInfo: { color: "#ccc", fontSize: 14, marginBottom: 10 },
-  modalOverview: { color: "#ddd", fontSize: 14, lineHeight: 20, textAlign: "center" },
-  modalCloseButton: { marginTop: 15, backgroundColor: "#E50914", paddingVertical: 10, paddingHorizontal: 25, borderRadius: 8 },
+  modalBackground: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.9)",
+    justifyContent: "center",
+    padding: 20,
+  },
+  modalContainer: {
+    backgroundColor: "#222",
+    borderRadius: 10,
+    padding: 20,
+    alignItems: "center",
+  },
+  modalTitle: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "bold",
+    marginBottom: 15,
+    textAlign: "center",
+  },
+  trailerContainer: {
+    width: width - 80,
+    height: 220,
+    borderRadius: 10,
+    overflow: "hidden",
+    marginBottom: 15,
+  },
+  noTrailer: { color: "#ccc", marginBottom: 15 },
+  modalOverview: {
+    color: "#ddd",
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  modalCloseButton: {
+    marginTop: 15,
+    backgroundColor: "#E50914",
+    paddingVertical: 10,
+    paddingHorizontal: 25,
+    borderRadius: 8,
+  },
   modalCloseText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
-
   myListButton: { paddingVertical: 10, paddingHorizontal: 25, borderRadius: 8, marginTop: 10 },
   myListText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
-
-  trailerButton: { marginTop: 15, backgroundColor: "#E50914", padding: 10, borderRadius: 8 },
-  trailerText: { color: "#fff", fontWeight: "bold" },
 });
