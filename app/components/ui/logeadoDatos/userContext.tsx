@@ -1,13 +1,27 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const UserContext = createContext();
+// Tipo de datos del usuario
+export interface UserData {
+  id?: number;
+  nombre: string;
+  correo: string;
+  usuario: string;
+}
 
-export const UserProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+// Tipo del contexto
+interface UserContextType {
+  user: UserData | null;
+  setUser: (user: UserData | null) => void;
+  loading: boolean;
+}
+
+const UserContext = createContext<UserContextType | undefined>(undefined);
+
+export const UserProvider = ({ children }: { children: ReactNode }) => {
+  const [user, setUser] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Cargar usuario al iniciar la app
   useEffect(() => {
     async function loadUser() {
       try {
@@ -22,7 +36,6 @@ export const UserProvider = ({ children }) => {
     loadUser();
   }, []);
 
-  // Guardar usuario cuando cambia
   useEffect(() => {
     async function saveUser() {
       if (user) {
@@ -41,4 +54,10 @@ export const UserProvider = ({ children }) => {
   );
 };
 
-export const useUser = () => useContext(UserContext);
+export const useUser = (): UserContextType => {
+  const context = useContext(UserContext);
+  if (!context) {
+    throw new Error('useUser debe usarse dentro de un UserProvider');
+  }
+  return context;
+};

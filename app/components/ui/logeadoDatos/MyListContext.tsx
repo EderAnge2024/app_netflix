@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Tipo del item
-interface MediaItem {
+export default interface MediaItem {
   id: number;
   title?: string;
   name?: string;

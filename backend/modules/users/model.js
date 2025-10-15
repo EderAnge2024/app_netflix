@@ -34,3 +34,21 @@ export async function findUser(usuario, contrasena) {
   );
   return result.rows[0];
 }
+
+// 🔍 Buscar usuario por correo (para recuperación)
+export async function findUserByEmail(correo) {
+  const result = await pool.query(
+    "SELECT * FROM users WHERE correo = $1",
+    [correo]
+  );
+  return result.rows[0];
+}
+
+// 🔄 Actualizar contraseña por correo
+export async function updatePassword(correo, nuevaContrasena) {
+  const result = await pool.query(
+    "UPDATE users SET contrasena = $1 WHERE correo = $2 RETURNING *",
+    [nuevaContrasena, correo]
+  );
+  return result.rows[0];
+}
