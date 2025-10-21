@@ -1,52 +1,47 @@
 import { createUser, findUser, findUserByEmail, updatePassword, createVerificationCode, verifyCode, cleanExpiredCodes } from "./model.js";
-import nodemailer from 'nodemailer'
-import dotenv from 'dotenv'
+import crypto from "crypto";
+import nodemailer from "nodemailer";
 
-dotenv.config(); // para leer variable de entorno
+// Configurable expiration time for verification codes (in seconds)
+const VERIFICATION_CODE_EXPIRATION = process.env.VERIFICATION_CODE_EXPIRATION
+  ? parseInt(process.env.VERIFICATION_CODE_EXPIRATION, 10)
+  : 600; // Default: 10 minutes
 
-// 📧 Función REAL para enviar correos
 const sendVerificationCode = async (correo, codigo) => {
-  try {
-    // Configurar el transporter con TU contraseña de aplicación
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
+  if (process.env.NODE_ENV === "production") {
+    // Configura el transporte de nodemailer (ajusta con tus credenciales reales)
+    let transporter = nodemailer.createTransport({
+      service: "gmail",
       auth: {
-        user: process.env.GMAIL_USER,  // ← Tu correo en .env
-        pass: process.env.GMAIL_APP_PASSWORD  // ← Tu contraseña SIN espacios en .env
-      }
+        user: process.env.EMAIL_USER, // tu correo
+        pass: process.env.EMAIL_PASS, // tu contraseña o app password
+      },
     });
 
-    // Configurar el contenido del correo
-    const mailOptions = {
-      from: `"Sistema de Verificación" <${process.env.GMAIL_USER}>`,
+    let mailOptions = {
+      from: process.env.EMAIL_USER,
       to: correo,
-      subject: '🔐 Código de Verificación - Recuperación de Contraseña',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #2563eb; text-align: center;">Recuperación de Contraseña</h2>
-          <p>Hola,</p>
-          <p>Has solicitado restablecer tu contraseña. Usa el siguiente código para verificar tu identidad:</p>
-          <div style="background: #f3f4f6; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; margin: 25px 0; letter-spacing: 8px; border-radius: 8px;">
-            ${codigo}
-          </div>
-          <p>Este código expirará en <strong>10 minutos</strong>.</p>
-          <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
-            Si no solicitaste este código, por favor ignora este mensaje.
-          </p>
-        </div>
-      `
+      subject: "Código de verificación",
+      text: `Tu código de verificación es: ${codigo}`,
     };
 
-    // Enviar el correo
-    const result = await transporter.sendMail(mailOptions);
-    console.log(`✅ Correo REAL enviado a: ${correo}`);
-    console.log(`📫 ID del mensaje: ${result.messageId}`);
-    
-    return { success: true, messageId: result.messageId };
-    
-  } catch (error) {
-    console.error('❌ Error enviando correo REAL:', error);
-    throw new Error(`No se pudo enviar el correo: ${error.message}`);
+    try {
+      await transporter.sendMail(mailOptions);
+      console.log(`✅ Código enviado a: ${correo}`);
+      return true;
+    } catch (error) {
+      console.error("Error enviando correo:", error);
+      throw new Error("No se pudo enviar el correo de verificación");
+    }
+  } else {
+    // Simulador para desarrollo
+    console.log(`📧 Código de verificación para ${correo}: ${codigo}`);
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        console.log(`✅ Código enviado a: ${correo}`);
+        resolve(true);
+      }, 1000);
+    });
   }
 };
 
@@ -75,20 +70,18 @@ export async function login(req, res) {
     } else {
       res.json({ success: false, message: "Usuario o contraseña incorrectos" });
     }
-
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 }
 
-// 🔄 Paso 1: Solicitar código de verificación
 export async function requestCode(req, res) {
   const { correo } = req.body;
 
   if (!correo) {
-    return res.status(400).json({ 
-      success: false, 
-      message: "El correo es obligatorio" 
+    return res.status(400).json({
+      success: false,
+      message: "El correo es obligatorio"
     });
   }
 
@@ -99,31 +92,32 @@ export async function requestCode(req, res) {
     // Verificar si el correo existe
     const user = await findUserByEmail(correo);
     if (!user) {
-      return res.json({ 
-        success: false, 
-        message: "Correo no encontrado" 
+      return res.json({
+        success: false,
+        message: "Correo no encontrado"
       });
     }
 
-    // Generar código de 6 dígitos
-    const codigo = Math.floor(100000 + Math.random() * 900000).toString();
-    
-    // Guardar código en la base de datos
-    await createVerificationCode(correo, codigo);
+    // Generar código de 6 dígitos de forma segura
+    const codigo = crypto.randomInt(100000, 1000000).toString();
 
-    // Enviar código por mensajería
+    // Guardar código en la base de datos (con expiración configurable)
+    await createVerificationCode(correo, codigo, VERIFICATION_CODE_EXPIRATION);
+
+    // Enviar código por mensajería (correo o simulador)
     await sendVerificationCode(correo, codigo);
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: "Código de verificación enviado a tu correo",
       correo: correo
     });
 
   } catch (err) {
-    res.status(500).json({ 
-      success: false, 
-      message: "Error al enviar el código: " + err.message 
+    console.error("Error en requestCode:", err);
+    res.status(500).json({
+      success: false,
+      message: "Error al enviar el código: " + (err?.message || err)
     });
   }
 }
@@ -133,9 +127,9 @@ export async function verifyCodeAndResetPassword(req, res) {
   const { correo, codigo, nuevaContrasena } = req.body;
 
   if (!correo || !codigo || !nuevaContrasena) {
-    return res.status(400).json({ 
-      success: false, 
-      message: "Todos los campos son obligatorios" 
+    return res.status(400).json({
+      success: false,
+      message: "Todos los campos son obligatorios"
     });
   }
 
@@ -143,34 +137,35 @@ export async function verifyCodeAndResetPassword(req, res) {
     // Verificar si el código es válido
     const verifiedCode = await verifyCode(correo, codigo);
     if (!verifiedCode) {
-      return res.json({ 
-        success: false, 
-        message: "Código inválido o expirado" 
+      return res.json({
+        success: false,
+        message: "Código inválido o expirado"
       });
     }
 
     // Verificar si el correo existe
     const user = await findUserByEmail(correo);
     if (!user) {
-      return res.json({ 
-        success: false, 
-        message: "Correo no encontrado" 
+      return res.json({
+        success: false,
+        message: "Correo no encontrado"
       });
     }
 
     // Actualizar la contraseña
     const updatedUser = await updatePassword(correo, nuevaContrasena);
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: "Contraseña actualizada correctamente. Ahora puedes iniciar sesión con tu nueva contraseña.",
-      user: updatedUser 
+      user: updatedUser
     });
 
   } catch (err) {
-    res.status(500).json({ 
-      success: false, 
-      message: "Error al actualizar la contraseña: " + err.message 
+    console.error("Error en verifyCodeAndResetPassword:", err);
+    res.status(500).json({
+      success: false,
+      message: "Error al actualizar la contraseña: " + (err?.message || err)
     });
   }
 }
@@ -180,69 +175,71 @@ export async function verifyCodeOnly(req, res) {
   const { correo, codigo } = req.body;
 
   if (!correo || !codigo) {
-    return res.status(400).json({ 
-      success: false, 
-      message: "Correo y código son obligatorios" 
+    return res.status(400).json({
+      success: false,
+      message: "Correo y código son obligatorios"
     });
   }
 
   try {
     const verifiedCode = await verifyCode(correo, codigo);
-    
+
     if (verifiedCode) {
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         message: "Código verificado correctamente",
         valido: true
       });
     } else {
-      res.json({ 
-        success: false, 
+      res.json({
+        success: false,
         message: "Código inválido o expirado",
         valido: false
       });
     }
 
   } catch (err) {
-    res.status(500).json({ 
-      success: false, 
-      message: "Error al verificar el código: " + err.message 
+    console.error("Error en verifyCodeOnly:", err);
+    res.status(500).json({
+      success: false,
+      message: "Error al verificar el código: " + (err?.message || err)
     });
   }
 }
 
-// 🔍 Verificar si correo existe (puedes mantener esta función si la necesitas)
+// 🔍 Verificar si correo existe
 export async function verifyEmail(req, res) {
   const { correo } = req.body;
 
   if (!correo) {
-    return res.status(400).json({ 
-      success: false, 
-      message: "El correo es obligatorio" 
+    return res.status(400).json({
+      success: false,
+      message: "El correo es obligatorio"
     });
   }
 
   try {
     const user = await findUserByEmail(correo);
-    
+
     if (user) {
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         exists: true,
-        message: "Correo verificado correctamente" 
+        message: "Correo verificado correctamente"
       });
     } else {
-      res.json({ 
-        success: false, 
+      res.json({
+        success: false,
         exists: false,
-        message: "Correo no encontrado" 
+        message: "Correo no encontrado"
       });
     }
 
   } catch (err) {
-    res.status(500).json({ 
-      success: false, 
-      message: "Error al verificar el correo: " + err.message 
+    console.error("Error en verifyEmail:", err);
+    res.status(500).json({
+      success: false,
+      message: "Error al verificar el correo: " + (err?.message || err)
     });
   }
 }

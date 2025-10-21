@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, JSX } from "react";
 import {
   View,
   Text,
@@ -11,8 +11,6 @@ import {
   Pressable,
   Dimensions,
   ActivityIndicator,
-  Linking,
-  Alert,
 } from "react-native";
 import { WebView } from "react-native-webview";
 import { API_KEY, BASE_URL, IMAGE_BASE_URL } from "@/service/apiThemoviedb";
@@ -55,17 +53,26 @@ export default function HomeScreen(): JSX.Element {
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
   const [isTrailerLoading, setIsTrailerLoading] = useState(false);
 
-  const bannerRef = useRef<FlatList>(null);
+  const bannerRef = useRef<FlatList<MediaItem> | null>(null);
 
-  // Auto-scroll del banner
+  // Auto-scroll del banner (protección si featuredList está vacío)
   useEffect(() => {
+    if (!featuredList || featuredList.length === 0) return;
+
     const timer = setInterval(() => {
       setFeaturedIndex((prev) => {
-        const next = (prev + 1) % featuredList.length;
-        bannerRef.current?.scrollToIndex({ index: next, animated: true });
+        const next = featuredList.length > 0 ? (prev + 1) % featuredList.length : prev;
+        try {
+          // scrollToIndex puede lanzar si el índice está fuera de rango
+          bannerRef.current?.scrollToIndex({ index: next, animated: true });
+        } catch (e) {
+          // Fallback: calcular offset
+          bannerRef.current?.scrollToOffset({ offset: next * width, animated: true });
+        }
         return next;
       });
     }, 5000);
+
     return () => clearInterval(timer);
   }, [featuredList]);
 
@@ -95,19 +102,31 @@ export default function HomeScreen(): JSX.Element {
   }, []);
 
   const fetchMoreMovies = async () => {
-    const nextPage = pageMovies + 1;
-    const res = await fetch(`${BASE_URL}/movie/popular?api_key=${API_KEY}&language=es-ES&page=${nextPage}`);
-    const data = await res.json();
-    setMovies((prev) => [...prev, ...data.results]);
-    setPageMovies(nextPage);
+    try {
+      const nextPage = pageMovies + 1;
+      const res = await fetch(`${BASE_URL}/movie/popular?api_key=${API_KEY}&language=es-ES&page=${nextPage}`);
+      const data = await res.json();
+      if (Array.isArray(data.results) && data.results.length > 0) {
+        setMovies((prev) => [...prev, ...data.results]);
+        setPageMovies(nextPage);
+      }
+    } catch (err) {
+      console.error("Error cargando más películas:", err);
+    }
   };
 
   const fetchMoreSeries = async () => {
-    const nextPage = pageSeries + 1;
-    const res = await fetch(`${BASE_URL}/tv/popular?api_key=${API_KEY}&language=es-ES&page=${nextPage}`);
-    const data = await res.json();
-    setSeries((prev) => [...prev, ...data.results]);
-    setPageSeries(nextPage);
+    try {
+      const nextPage = pageSeries + 1;
+      const res = await fetch(`${BASE_URL}/tv/popular?api_key=${API_KEY}&language=es-ES&page=${nextPage}`);
+      const data = await res.json();
+      if (Array.isArray(data.results) && data.results.length > 0) {
+        setSeries((prev) => [...prev, ...data.results]);
+        setPageSeries(nextPage);
+      }
+    } catch (err) {
+      console.error("Error cargando más series:", err);
+    }
   };
 
   const fetchTrailer = async (item: MediaItem) => {
@@ -240,7 +259,7 @@ export default function HomeScreen(): JSX.Element {
                   <WebView
                     source={{ uri: `https://www.youtube.com/embed/${trailerKey}` }}
                     allowsFullscreenVideo
-                    style={{ borderRadius: 10 }}
+                    style={{ flex: 1 }}
                   />
                 </View>
               ) : (
@@ -305,12 +324,13 @@ const styles = StyleSheet.create({
   bannerTextContainer: { position: "absolute", bottom: 60, left: 20, right: 20 },
   bannerTitle: { color: "#fff", fontSize: 28, fontWeight: "bold", marginBottom: 10 },
   bannerDesc: { color: "#ddd", fontSize: 14, marginBottom: 15 },
-  bannerButtonsRow: { flexDirection: "row", gap: 10 },
+  bannerButtonsRow: { flexDirection: "row" },
   bannerButton: {
     backgroundColor: "#E50914",
     paddingVertical: 10,
     paddingHorizontal: 18,
     borderRadius: 6,
+    marginRight: 10,
   },
   bannerButtonPlay: {
     backgroundColor: "#fff",

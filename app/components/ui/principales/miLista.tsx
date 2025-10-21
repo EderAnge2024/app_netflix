@@ -1,5 +1,5 @@
 // components/ui/principales/MiLista.tsx
-import React, { useState } from "react";
+import React, { JSX, useState } from "react";
 import {
   View,
   Text,
@@ -14,12 +14,13 @@ import {
 import YoutubePlayer from "react-native-youtube-iframe";
 import { WebView } from "react-native-webview";
 import { useMyList } from "@/components/ui/logeadoDatos/MyListContext";
+import { API_KEY, BASE_URL, IMAGE_BASE_URL } from "@/service/apiThemoviedb"; // usar constantes centralizadas
 
 interface MediaItem {
   id: number;
   title?: string;
   name?: string;
-  poster_path: string;
+  poster_path?: string;
   overview?: string;
   release_date?: string;
   first_air_date?: string;
@@ -33,10 +34,6 @@ interface MyListContextType {
   loading: boolean;
 }
 
-const API_KEY = "TU_API_KEY"; // Coloca tu API Key de TMDB
-const BASE_URL = "https://api.themoviedb.org/3";
-const IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500";
-
 export default function MiLista(): JSX.Element {
   const { myList, removeFromMyList, loading } = useMyList() as MyListContextType;
 
@@ -48,16 +45,16 @@ export default function MiLista(): JSX.Element {
 
   // 🔹 Obtener tráiler real desde TMDB
   const obtenerTrailerReal = async (item: MediaItem) => {
-    if (!item.id) return null;
+    if (!item?.id) return null;
     setLoadingVideo(true);
     try {
-      const tipo = item.media_type === "movie" ? "movie" : "tv";
+      const tipo = item.media_type ? item.media_type : item.title ? "movie" : "tv";
       const res = await fetch(
         `${BASE_URL}/${tipo}/${item.id}/videos?api_key=${API_KEY}&language=es-ES`
       );
       const data = await res.json();
-      const trailer = data.results.find(
-        (v: any) => v.type === "Trailer" && v.site === "YouTube"
+      const trailer = data?.results?.find(
+        (v: any) => v?.type === "Trailer" && v?.site === "YouTube"
       );
       return trailer ? trailer.key : null;
     } catch (error) {
@@ -71,6 +68,7 @@ export default function MiLista(): JSX.Element {
   const openModal = async (item: MediaItem) => {
     setSelectedItem(item);
     setShowVideo(false);
+    setVideoId(null);
     const id = await obtenerTrailerReal(item);
     setVideoId(id);
     setModalVisible(true);
@@ -78,17 +76,24 @@ export default function MiLista(): JSX.Element {
 
   const renderItem = ({ item }: { item: MediaItem }) => (
     <View style={styles.item}>
-      <Image
-        source={{ uri: `${IMAGE_BASE_URL}${item.poster_path}` }}
-        style={styles.poster}
-      />
+      {item.poster_path ? (
+        <Image
+          source={{ uri: `${IMAGE_BASE_URL}${item.poster_path}` }}
+          style={styles.poster}
+        />
+      ) : (
+        <View style={[styles.poster, styles.posterPlaceholder]}>
+          <Text style={styles.posterPlaceholderText}>No imagen</Text>
+        </View>
+      )}
+
       <View style={styles.info}>
         <Text style={styles.title}>{item.title || item.name}</Text>
-        <View style={{ flexDirection: "row", gap: 10 }}>
-          <TouchableOpacity onPress={() => openModal(item)}>
+        <View style={styles.itemButtonsRow}>
+          <TouchableOpacity onPress={() => openModal(item)} style={styles.btnSmall}>
             <Text style={styles.trailerText}>Ver Info / Tráiler</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => removeFromMyList(item)}>
+          <TouchableOpacity onPress={() => removeFromMyList(item)} style={styles.btnSmall}>
             <Text style={styles.remove}>Eliminar</Text>
           </TouchableOpacity>
         </View>
@@ -120,7 +125,15 @@ export default function MiLista(): JSX.Element {
       )}
 
       {/* Modal */}
-      <Modal visible={modalVisible} animationType="slide" transparent>
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => {
+          setModalVisible(false);
+          setShowVideo(false);
+        }}
+      >
         <View style={styles.modalBackground}>
           <View style={styles.modalContent}>
             <TouchableOpacity
@@ -135,15 +148,18 @@ export default function MiLista(): JSX.Element {
 
             {selectedItem && (
               <>
-                <Image
-                  source={{ uri: `${IMAGE_BASE_URL}${selectedItem.poster_path}` }}
-                  style={styles.modalPoster}
-                />
+                {selectedItem.poster_path ? (
+                  <Image
+                    source={{ uri: `${IMAGE_BASE_URL}${selectedItem.poster_path}` }}
+                    style={styles.modalPoster}
+                  />
+                ) : null}
+
                 <Text style={styles.modalTitle}>
                   {selectedItem.title || selectedItem.name}
                 </Text>
                 <Text style={styles.modalInfo}>
-                  ⭐ {selectedItem.vote_average?.toFixed(1) || "N/A"}
+                  ⭐ {selectedItem.vote_average != null ? selectedItem.vote_average.toFixed(1) : "N/A"}
                 </Text>
                 <Text style={styles.modalDescription}>
                   {selectedItem.overview || "Sin descripción disponible."}
@@ -160,7 +176,7 @@ export default function MiLista(): JSX.Element {
                   <ActivityIndicator size="large" color="#E50914" />
                 ) : videoId ? (
                   Platform.OS !== "web" ? (
-                    <YoutubePlayer height={250} play videoId={videoId} />
+                    <YoutubePlayer height={250} play={true} videoId={videoId} />
                   ) : (
                     <WebView
                       style={{ width: "100%", height: 250 }}
@@ -169,7 +185,7 @@ export default function MiLista(): JSX.Element {
                   )
                 ) : (
                   <Text style={styles.noTrailer}>
-                    No se encontró un tráiler para "{selectedItem.title || selectedItem.name}" 😕
+                    {`No se encontró un tráiler para "${selectedItem?.title || selectedItem?.name}" 😕`}
                   </Text>
                 )}
               </>
@@ -209,7 +225,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     marginBottom: 15,
     alignItems: "center",
-    gap: 15,
     backgroundColor: "#1c1c1c",
     borderRadius: 10,
     padding: 10,
@@ -218,6 +233,17 @@ const styles = StyleSheet.create({
     width: 80,
     height: 120,
     borderRadius: 8,
+    marginRight: 15,
+    resizeMode: "cover",
+  },
+  posterPlaceholder: {
+    backgroundColor: "#333",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  posterPlaceholderText: {
+    color: "#999",
+    fontSize: 12,
   },
   info: {
     flex: 1,
@@ -234,9 +260,16 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   trailerText: {
-    color: "#69b6a7ff",
+    color: "#69b6a7",
     fontSize: 14,
     fontWeight: "bold",
+  },
+  itemButtonsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  btnSmall: {
+    marginRight: 12,
   },
   modalBackground: {
     flex: 1,
