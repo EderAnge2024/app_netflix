@@ -57,7 +57,7 @@ export default function SeriesSection({}: SeriesSectionProps) {
   const [trailerVisible, setTrailerVisible] = useState<boolean>(false);
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
 
-  // 🟡 Actualiza las funciones para usar MediaItem
+  // Lista para optener los generos
   const fetchGenres = async (): Promise<void> => {
     try {
       const res = await fetch(`${BASE_URL}/genre/tv/list?api_key=${API_KEY}&language=es-ES`);
@@ -68,7 +68,7 @@ export default function SeriesSection({}: SeriesSectionProps) {
       console.error("Error al obtener géneros:", error);
     }
   };
-
+  // busca series por cada genero
   const fetchSeriesByGenre = async (genreId: number): Promise<MediaItem[]> => {
     try {
       const res = await fetch(`${BASE_URL}/discover/tv?api_key=${API_KEY}&language=es-ES&with_genres=${genreId}`);
@@ -128,6 +128,7 @@ export default function SeriesSection({}: SeriesSectionProps) {
     loadData();
   }, []);
 
+  // cargar series por cada genero
   useEffect(() => {
     const loadSeries = async (): Promise<void> => {
       if (genres.length > 0) {
@@ -185,7 +186,7 @@ export default function SeriesSection({}: SeriesSectionProps) {
       </View>
     );
   }
-
+  
   const orderedGenres = selectedGenre
     ? [selectedGenre.name, ...Object.keys(seriesByGenre).filter((g) => g !== selectedGenre.name)]
     : Object.keys(seriesByGenre);
@@ -202,7 +203,7 @@ export default function SeriesSection({}: SeriesSectionProps) {
           </View>
         </TouchableOpacity>
       </View>
-
+      {/* combo de filtrado */}
       {dropdownVisible && (
         <View style={styles.dropdownMenu}>
           {genres.map((genre) => (
@@ -260,7 +261,7 @@ export default function SeriesSection({}: SeriesSectionProps) {
           </View>
         )}
 
-        {/* 🔹 Series por género */}
+        {/* Series por género filtaro automatico si combo */}
         {orderedGenres.map((genreName) => (
           <View key={genreName} style={styles.section}>
             <Text style={styles.sectionTitle}>{genreName}</Text>
@@ -275,7 +276,7 @@ export default function SeriesSection({}: SeriesSectionProps) {
         ))}
       </ScrollView>
 
-      {/* 🔹 Modal de información de serie */}
+      {/* Modal de información de serie */}
       <Modal visible={modalVisible} animationType="fade" transparent onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalBackground}>
           {selectedSerie && (
@@ -318,7 +319,7 @@ export default function SeriesSection({}: SeriesSectionProps) {
         </View>
       </Modal>
 
-      {/* 🎥 Modal del tráiler */}
+      {/* Modal del tráiler */}
       <Modal visible={trailerVisible} animationType="slide" transparent onRequestClose={() => setTrailerVisible(false)}>
         <View style={styles.trailerModalBackground}>
           <View style={styles.trailerContainer}>

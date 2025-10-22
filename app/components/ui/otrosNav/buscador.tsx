@@ -12,11 +12,13 @@ import {
   Modal,
   ActivityIndicator,
   Platform,
+  Alert,
 } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import YoutubePlayer from "react-native-youtube-iframe";
 import { API_KEY, BASE_URL, IMAGE_BASE_URL } from "@/service/apiThemoviedb";
+import { useMyList, MediaItem } from "@/components/ui/logeadoDatos/MyListContext";
 
 interface SearchResult {
   id: number;
@@ -27,6 +29,9 @@ interface SearchResult {
   poster_path?: string;
   profile_path?: string;
   vote_average?: number;
+  backdrop_path?: string;
+  release_date?: string;
+  first_air_date?: string;
 }
 
 interface ApiResponse<T> {
@@ -35,6 +40,8 @@ interface ApiResponse<T> {
 
 export default function SearchScreen() {
   const router = useRouter();
+  const { addToMyList, removeFromMyList, isInMyList, loading: listLoading } = useMyList();
+  
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState<boolean>(false);
@@ -79,6 +86,36 @@ export default function SearchScreen() {
     setSearchQuery("");
     setSearchResults([]);
     Keyboard.dismiss();
+  };
+
+  // Función para manejar Mi Lista
+  const handleMyList = async (item: SearchResult) => {
+    try {
+      // Convertir SearchResult a MediaItem
+      const mediaItem: MediaItem = {
+        id: item.id,
+        title: item.title || item.name || '',
+        name: item.name || item.title || '',
+        overview: item.overview || '',
+        poster_path: item.poster_path || '',
+        backdrop_path: item.backdrop_path || '',
+        vote_average: item.vote_average || 0,
+        media_type: item.media_type,
+        release_date: item.release_date,
+        first_air_date: item.first_air_date,
+      };
+
+      if (isInMyList(item.id)) {
+        await removeFromMyList(mediaItem);
+        Alert.alert("✅ Removido", `${item.title || item.name} se eliminó de tu lista.`);
+      } else {
+        await addToMyList(mediaItem);
+        Alert.alert("✅ Agregado", `${item.title || item.name} se agregó a tu lista.`);
+      }
+    } catch (error) {
+      console.error("Error al actualizar mi lista:", error);
+      Alert.alert("❌ Error", "No se pudo actualizar tu lista.");
+    }
   };
 
   // Función para obtener tráiler desde TMDB
@@ -228,36 +265,65 @@ export default function SearchScreen() {
                   {selectedItem.title || selectedItem.name}
                 </Text>
                 <Text style={styles.modalInfo}>
-                  ⭐ {selectedItem.vote_average?.toFixed(1) || "N/A"}
+                  ⭐ {selectedItem.vote_average?.toFixed(1) || "N/A"} | 🗓{" "}
+                  {selectedItem.release_date || selectedItem.first_air_date || "N/A"}
                 </Text>
                 <Text style={styles.modalDescription}>
                   {selectedItem.overview || "Sin descripción disponible."}
                 </Text>
+
+                {/* Botones de acción */}
+                <View style={styles.modalButtonsContainer}>
+                  {/* Botón Agregar a Mi Lista */}
+                  <TouchableOpacity
+                    style={[
+                      styles.myListButton,
+                      isInMyList(selectedItem.id) && styles.myListButtonActive
+                    ]}
+                    onPress={() => handleMyList(selectedItem)}
+                  >
+                    <Ionicons 
+                      name={isInMyList(selectedItem.id) ? "checkmark" : "add"} 
+                      size={20} 
+                      color="#fff" 
+                    />
+                    <Text style={styles.myListButtonText}>
+                      {isInMyList(selectedItem.id) ? "En Mi Lista" : "Mi Lista"}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Botón Ver Tráiler */}
+                  {!showVideo && (
+                    <TouchableOpacity
+                      style={styles.trailerButton}
+                      onPress={() => setShowVideo(true)}
+                    >
+                      <Ionicons name="play-circle" size={20} color="#fff" />
+                      <Text style={styles.trailerText}>Tráiler</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </>
             )}
 
-            {!showVideo ? (
-              <TouchableOpacity
-                style={styles.trailerButton}
-                onPress={() => setShowVideo(true)}
-              >
-                <Ionicons name="play-circle" size={28} color="#fff" />
-                <Text style={styles.trailerText}>Ver tráiler</Text>
-              </TouchableOpacity>
-            ) : loadingVideo ? (
-              <ActivityIndicator size="large" color="#E50914" />
-            ) : videoId ? (
-              Platform.OS !== "web" ? (
-                <YoutubePlayer height={250} play={true} videoId={videoId} />
-              ) : (
-                <Text style={styles.noTrailer}>
-                  🎬 El tráiler no está disponible en versión web.
-                </Text>
-              )
-            ) : (
-              <Text style={styles.noTrailer}>
-                No se encontró un tráiler para "{selectedItem?.title || selectedItem?.name}" 😕
-              </Text>
+            {showVideo && (
+              <View style={styles.videoContainer}>
+                {loadingVideo ? (
+                  <ActivityIndicator size="large" color="#E50914" />
+                ) : videoId ? (
+                  Platform.OS !== "web" ? (
+                    <YoutubePlayer height={250} play={true} videoId={videoId} />
+                  ) : (
+                    <Text style={styles.noTrailer}>
+                      🎬 El tráiler no está disponible en versión web.
+                    </Text>
+                  )
+                ) : (
+                  <Text style={styles.noTrailer}>
+                    No se encontró un tráiler para "{selectedItem?.title || selectedItem?.name}" 😕
+                  </Text>
+                )}
+              </View>
             )}
           </View>
         </View>
@@ -298,16 +364,80 @@ const styles = StyleSheet.create({
   resultTitle: { color: "#fff", fontSize: 16, fontWeight: "bold" },
   resultType: { color: "#ccc", fontSize: 14 },
   resultRating: { color: "#ffd700", fontSize: 14, marginTop: 4 },
-  modalBackground: { flex: 1, backgroundColor: "rgba(0,0,0,0.95)", justifyContent: "center", alignItems: "center" },
-  modalContent: { width: "90%", borderRadius: 12, backgroundColor: "#000", padding: 20, alignItems: "center" },
+  modalBackground: { 
+    flex: 1, 
+    backgroundColor: "rgba(0,0,0,0.95)", 
+    justifyContent: "center", 
+    alignItems: "center" 
+  },
+  modalContent: { 
+    width: "90%", 
+    borderRadius: 12, 
+    backgroundColor: "#000", 
+    padding: 20, 
+    alignItems: "center",
+    maxHeight: "80%",
+  },
   modalPoster: { width: 200, height: 300, borderRadius: 10, marginBottom: 10 },
-  closeButton: { alignSelf: "flex-end" },
-  modalTitle: { color: "#fff", fontSize: 20, fontWeight: "bold", marginBottom: 5 },
-  modalInfo: { color: "#ffd700", fontSize: 16, marginBottom: 10 },
-  modalDescription: { color: "#ccc", fontSize: 14, textAlign: "center", marginBottom: 15 },
-  trailerButton: { flexDirection: "row", alignItems: "center", backgroundColor: "#E50914", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
-  trailerText: { color: "#fff", fontSize: 16, marginLeft: 8 },
-  noTrailer: { color: "#ccc", fontSize: 16, marginTop: 20, textAlign: "center" },
+  closeButton: { alignSelf: "flex-end", marginBottom: 10 },
+  modalTitle: { color: "#fff", fontSize: 20, fontWeight: "bold", marginBottom: 5, textAlign: "center" },
+  modalInfo: { color: "#ffd700", fontSize: 14, marginBottom: 10 },
+  modalDescription: { color: "#ccc", fontSize: 14, textAlign: "center", marginBottom: 15, lineHeight: 20 },
+  
+  // Botones del modal
+  modalButtonsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    marginBottom: 15,
+    gap: 10,
+  },
+  myListButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#E50914",
+    paddingVertical: 12,
+    borderRadius: 8,
+    gap: 8,
+  },
+  myListButtonActive: {
+    backgroundColor: "#2d2d2d",
+  },
+  myListButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 14,
+  },
+  trailerButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#E50914",
+    paddingVertical: 12,
+    borderRadius: 8,
+    gap: 8,
+  },
+  trailerText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 14,
+  },
+  
+  // Contenedor del video
+  videoContainer: {
+    width: "100%",
+    marginTop: 10,
+  },
+  noTrailer: { 
+    color: "#ccc", 
+    fontSize: 16, 
+    marginTop: 20, 
+    textAlign: "center",
+    padding: 10,
+  },
   loadingContainer: { alignItems: "center", paddingVertical: 40 },
   loadingText: { color: "#fff", fontSize: 16 },
 });

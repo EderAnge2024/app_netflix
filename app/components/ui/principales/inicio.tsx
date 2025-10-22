@@ -19,7 +19,7 @@ import { Linking } from "react-native";
 
 const { width } = Dimensions.get("window");
 
-// 🧩 Tipo de datos para películas o series
+// Tipo de datos para películas o series
 interface MediaItem {
   id: number;
   title?: string;
@@ -32,7 +32,7 @@ interface MediaItem {
   vote_average?: number;
 }
 
-// 🧠 Tipado del contexto de Mi Lista
+// Tipado del contexto de Mi Lista
 interface MyListContextType {
   addToMyList: (item: MediaItem) => void;
   removeFromMyList: (item: MediaItem) => void;
@@ -85,7 +85,7 @@ export default function HomeScreen(): JSX.Element {
     fetchData();
   }, []);
 
-  // 🔹 Abrir modal
+  // Abrir modal y busca si hay trailers disponibles
   const openModal = async (item: MediaItem) => {
     setSelectedItem(item);
     setModalVisible(true);
@@ -154,7 +154,7 @@ export default function HomeScreen(): JSX.Element {
           </View>
         )}
 
-        {/* 🔥 Secciones */}
+        {/* Secciones */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Películas populares</Text>
           <FlatList

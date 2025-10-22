@@ -61,11 +61,11 @@ export default function PeliculasScreen({}: PeliculasScreenProps) {
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
 
-  // 🎥 Estados para el tráiler
+  // Estados para el tráiler
   const [trailerVisible, setTrailerVisible] = useState<boolean>(false);
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
 
-  // 🔹 Obtener géneros
+  // Obtener lista de géneros
   const fetchGenres = async (): Promise<void> => {
     try {
       const res = await fetch(`${BASE_URL}/genre/movie/list?api_key=${API_KEY}&language=es-ES`);
@@ -77,7 +77,7 @@ export default function PeliculasScreen({}: PeliculasScreenProps) {
     }
   };
 
-  // 🔹 Obtener películas por género
+  // Obtener películas por género
   const fetchMoviesByGenre = async (genreId: number): Promise<Movie[]> => {
     try {
       const res = await fetch(`${BASE_URL}/discover/movie?api_key=${API_KEY}&language=es-ES&with_genres=${genreId}`);
@@ -89,7 +89,7 @@ export default function PeliculasScreen({}: PeliculasScreenProps) {
     }
   };
 
-  // 🎥 Obtener tráiler de la película
+  // Obtener tráiler de la película
   const fetchTrailer = async (movieId: number): Promise<string | null> => {
     try {
       const res = await fetch(`${BASE_URL}/movie/${movieId}/videos?api_key=${API_KEY}&language=es-ES`);
@@ -102,7 +102,7 @@ export default function PeliculasScreen({}: PeliculasScreenProps) {
     }
   };
 
-  // 🎥 Abrir tráiler
+  // Abrir tráiler
   const openTrailer = async (movieId: number): Promise<void> => {
     const key = await fetchTrailer(movieId);
     if (key) {
@@ -113,7 +113,7 @@ export default function PeliculasScreen({}: PeliculasScreenProps) {
     }
   };
 
-  // ✅ Función para manejar Mi Lista
+  // Función para manejar Mi Lista
   const handleMyList = async (movie: Movie): Promise<void> => {
     try {
       if (isInMyList(movie.id)) {
@@ -129,7 +129,7 @@ export default function PeliculasScreen({}: PeliculasScreenProps) {
     }
   };
 
-  // 🔹 Abrir modal con la película seleccionada
+  // Abrir modal con la película seleccionada
   const openModal = async (movie: Movie): Promise<void> => {
     setSelectedMovie(movie);
     setModalVisible(true);
@@ -139,7 +139,7 @@ export default function PeliculasScreen({}: PeliculasScreenProps) {
     setTrailerKey(key);
   };
 
-  // 🔹 Cargar datos
+  // Cargar datos
   useEffect(() => {
     const loadData = async (): Promise<void> => {
       setLoading(true);
@@ -147,7 +147,8 @@ export default function PeliculasScreen({}: PeliculasScreenProps) {
     };
     loadData();
   }, []);
-
+  
+  // filtrado sin combo automaticamente
   useEffect(() => {
     const loadMovies = async (): Promise<void> => {
       if (genres.length > 0) {
@@ -199,7 +200,7 @@ export default function PeliculasScreen({}: PeliculasScreenProps) {
     );
   }
 
-  // 🔹 Ordenar géneros: el seleccionado primero
+  // Ordenar géneros: el seleccionado primero
   const orderedGenres = selectedGenre
     ? [selectedGenre.name, ...Object.keys(moviesByGenre).filter((g) => g !== selectedGenre.name)]
     : Object.keys(moviesByGenre);
@@ -243,27 +244,37 @@ export default function PeliculasScreen({}: PeliculasScreenProps) {
 
       {/* 🔹 Contenido principal */}
       <ScrollView style={styles.scrollContainer}>
-        {/* Película destacada */}
+        {/* PORTADA DESTACADA - CON ESTILO DEL CÓDIGO ANTERIOR */}
         {featuredMovie && (
-          <TouchableOpacity onPress={() => openModal(featuredMovie)}>
-            <Image
-              source={{
-                uri: `${IMAGE_BASE_URL}${featuredMovie.backdrop_path || featuredMovie.poster_path}`,
-              }}
-              style={styles.featuredImage}
-            />
+          <View style={styles.featuredContainer}>
+            {featuredMovie.backdrop_path && (
+              <Image
+                source={{ uri: `${IMAGE_BASE_URL}${featuredMovie.backdrop_path}` }}
+                style={styles.featuredImage}
+                resizeMode="cover"
+              />
+            )}
             <View style={styles.overlay}>
               <Text style={styles.featuredTitle}>{featuredMovie.title}</Text>
               <Text style={styles.featuredOverview} numberOfLines={3}>
                 {featuredMovie.overview}
               </Text>
+              <Text style={{ color: "#ffcc00", marginBottom: 5 }}>
+                ⭐ {featuredMovie.vote_average?.toFixed(1) || "N/A"} | 🗓 {featuredMovie.release_date || "N/A"}
+              </Text>
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <Pressable style={styles.featuredButton} onPress={() => openModal(featuredMovie)}>
+                  <Text style={styles.featuredButtonText}>Ver Más</Text>
+                </Pressable>
+                <Pressable style={styles.featuredButtonPlay} onPress={() => openTrailer(featuredMovie.id)}>
+                  <Text style={styles.featuredButtonPlayText}>▶ Reproducir</Text>
+                </Pressable>
+              </View>
             </View>
-          </TouchableOpacity>
+          </View>
         )}
 
-        <Text style={styles.mainTitle}>Películas por género</Text>
-
-        {/* Películas agrupadas */}
+        {/* Películas agrupadas sin combo pero filtradas */}
         {orderedGenres.map((genreName) => (
           <View key={genreName} style={styles.section}>
             <Text style={styles.sectionTitle}>{genreName}</Text>
@@ -405,20 +416,21 @@ const styles = StyleSheet.create({
   dropdownText: { color: "#ccc", fontSize: 15 },
   dropdownTextActive: { color: "#fff", fontWeight: "bold" },
 
-  // 🔹 Banner principal
-  featuredImage: { width: "100%", height: 220, borderRadius: 10, marginBottom: 15 },
+  // 🔹 PORTADA DESTACADA - Estilo del código anterior
+  featuredContainer: { width: "100%", height: 500, marginBottom: 20 },
+  featuredImage: { width: "100%", height: "100%" },
   overlay: {
     position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    padding: 15,
-    borderBottomLeftRadius: 10,
-    borderBottomRightRadius: 10,
+    bottom: 10,
+    left: 15,
+    right: 15,
   },
   featuredTitle: { color: "#fff", fontSize: 20, fontWeight: "bold", marginBottom: 5 },
-  featuredOverview: { color: "#fff", fontSize: 12 },
+  featuredOverview: { color: "#fff", fontSize: 12, marginBottom: 10 },
+  featuredButton: { backgroundColor: "#E50914", padding: 8, borderRadius: 5 },
+  featuredButtonText: { color: "#fff", fontWeight: "bold" },
+  featuredButtonPlay: { backgroundColor: "#fff", padding: 8, borderRadius: 5 },
+  featuredButtonPlayText: { color: "#000", fontWeight: "bold" },
 
   mainTitle: { color: "#fff", fontSize: 24, fontWeight: "bold", margin: 15 },
   section: { marginBottom: 25 },
