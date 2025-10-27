@@ -7,7 +7,7 @@ const pool = new Pool({
   user: "postgres",
   password: "portodander123",
   database: "appnetflix",
-  port: 5433,
+  port: 5432,
 });
 
 // Verificar conexión

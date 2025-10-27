@@ -1,4 +1,4 @@
-const BASE_URL = `http://192.168.137.107:3000`
+const BASE_URL = `http://192.168.137.60:3000`
 
 export async function loginUser(usuario, contrasena) {
   try {

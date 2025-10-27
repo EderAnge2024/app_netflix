@@ -1,47 +1,84 @@
 import { createUser, findUser, findUserByEmail, updatePassword, createVerificationCode, verifyCode, cleanExpiredCodes } from "./model.js";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+// Crear el transportador de correo
+const createTransporter = () => {
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_APP_PASSWORD
+    },
+    connectionTimeout: 30000,
+    socketTimeout: 30000,
+    greetingTimeout: 30000,
+    pool: true,
+    maxConnections: 3,
+    maxMessages: 50
+  });
+};
+
+// Función para enviar correos con reintentos
+const sendEmailWithRetry = async (mailOptions, maxRetries = 3) => {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const transporter = createTransporter();
+    try {
+      console.log(`📧 Intento ${attempt} de enviar correo a: ${mailOptions.to}`);
+      const result = await transporter.sendMail(mailOptions);
+      console.log(`✅ Correo enviado a: ${mailOptions.to}`);
+      await transporter.close();
+      return { success: true, messageId: result.messageId };
+    } catch (error) {
+      console.error(`❌ Intento ${attempt} fallado:`, error.code);
+      try { await transporter.close(); } catch (e) {}
+      if (attempt === maxRetries) throw error;
+      const waitTime = Math.pow(2, attempt) * 1000;
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+  }
+};
 
 // Configurable expiration time for verification codes (in seconds)
 const VERIFICATION_CODE_EXPIRATION = process.env.VERIFICATION_CODE_EXPIRATION
   ? parseInt(process.env.VERIFICATION_CODE_EXPIRATION, 10)
   : 600; // Default: 10 minutes
 
+// Reemplazar la función sendVerificationCode existente con esta versión mejorada
 const sendVerificationCode = async (correo, codigo) => {
-  if (process.env.NODE_ENV === "production") {
-    // Configura el transporte de nodemailer (ajusta con tus credenciales reales)
-    let transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.EMAIL_USER, // tu correo
-        pass: process.env.EMAIL_PASS, // tu contraseña o app password
-      },
-    });
+  if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+    console.error('❌ Credenciales de correo no configuradas');
+    throw new Error('Credenciales de correo no configuradas');
+  }
 
-    let mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: correo,
-      subject: "Código de verificación",
-      text: `Tu código de verificación es: ${codigo}`,
-    };
+  const mailOptions = {
+    from: `"Sistema de Verificación" <${process.env.GMAIL_USER}>`,
+    to: correo,
+    subject: '🔐 Código de Verificación - Recuperación de Contraseña',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #2563eb; text-align: center;">Recuperación de Contraseña</h2>
+        <p>Hola,</p>
+        <p>Has solicitado restablecer tu contraseña. Usa el siguiente código para verificar tu identidad:</p>
+        <div style="background: #f3f4f6; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; margin: 25px 0; letter-spacing: 8px; border-radius: 8px;">
+          ${codigo}
+        </div>
+        <p>Este código expirará en <strong>10 minutos</strong>.</p>
+        <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
+          Si no solicitaste este código, por favor ignora este mensaje.
+        </p>
+      </div>
+    `
+  };
 
-    try {
-      await transporter.sendMail(mailOptions);
-      console.log(`✅ Código enviado a: ${correo}`);
-      return true;
-    } catch (error) {
-      console.error("Error enviando correo:", error);
-      throw new Error("No se pudo enviar el correo de verificación");
-    }
-  } else {
-    // Simulador para desarrollo
-    console.log(`📧 Código de verificación para ${correo}: ${codigo}`);
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        console.log(`✅ Código enviado a: ${correo}`);
-        resolve(true);
-      }, 1000);
-    });
+  try {
+    return await sendEmailWithRetry(mailOptions);
+  } catch (error) {
+    console.error('❌ Error enviando correo:', error);
+    throw new Error(`Error al enviar el correo: ${error.message}`);
   }
 };
 
@@ -255,6 +292,20 @@ export async function verifyEmail(req, res) {
     res.status(500).json({
       success: false,
       message: "Error al verificar el correo: " + (err?.message || err)
+    });
+  }
+}
+
+// Agregar al final del controller.js
+export async function testEmailConnection(req, res) {
+  try {
+    const transporter = createTransporter();
+    await transporter.verify();
+    res.json({ success: true, message: "Conexión SMTP verificada correctamente" });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      message: "Error de conexión SMTP: " + error.message 
     });
   }
 }
