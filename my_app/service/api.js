@@ -1,9 +1,8 @@
-// api.js
+const BASE_URL = `http://192.168.137.107:3000`
 
-// 🔹 Login
 export async function loginUser(usuario, contrasena) {
   try {
-    const response = await fetch('http://localhost:3000/api/login', {
+    const response = await fetch(`${BASE_URL}/api/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ usuario, contrasena }),
@@ -19,7 +18,7 @@ export async function loginUser(usuario, contrasena) {
 // 🔹 Registro
 export async function registerUser(nombre, usuario, contrasena, correo) {
   try {
-    const response = await fetch('http://localhost:3000/api/register', {
+    const response = await fetch(`${BASE_URL}/api/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ nombre, usuario, contrasena, correo }),
@@ -34,7 +33,7 @@ export async function registerUser(nombre, usuario, contrasena, correo) {
 // 🔄 Solicitar código de verificación
 export async function requestCode(correo) {
   try {
-    const response = await fetch('http://localhost:3000/api/request-code', {
+    const response = await fetch(`${BASE_URL}/api/request-code`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ correo }),
@@ -50,7 +49,7 @@ export async function requestCode(correo) {
 // 🔄 Verificar código y cambiar contraseña
 export async function verifyCodeAndResetPassword(correo, codigo, nuevaContrasena) {
   try {
-    const response = await fetch('http://localhost:3000/api/verify-code-reset', {
+    const response = await fetch(`${BASE_URL}/api/verify-code-reset`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ correo, codigo, nuevaContrasena }),
@@ -66,7 +65,7 @@ export async function verifyCodeAndResetPassword(correo, codigo, nuevaContrasena
 // 🔍 Verificar solo el código
 export async function verifyCodeOnly(correo, codigo) {
   try {
-    const response = await fetch('http://localhost:3000/api/verify-code', {
+    const response = await fetch(`${BASE_URL}/api/verify-code`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ correo, codigo }),
@@ -82,7 +81,7 @@ export async function verifyCodeOnly(correo, codigo) {
 // 🔍 Verificar correo
 export async function verifyEmail(correo) {
   try {
-    const response = await fetch('http://localhost:3000/api/verify-email', {
+    const response = await fetch(`${BASE_URL}/api/verify-email`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ correo }),

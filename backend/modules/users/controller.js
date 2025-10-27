@@ -45,6 +45,21 @@ const sendVerificationCode = async (correo, codigo) => {
   }
 };
 
+// 🔧 Función para verificar conexión SMTP (opcional)
+export async function verifySMTPConnection() {
+  try {
+    const transporter = createTransporter();
+    await transporter.verify();
+    console.log('✅ Conexión SMTP verificada correctamente');
+    await transporter.close();
+    return true;
+  } catch (error) {
+    console.error('❌ Error verificando conexión SMTP:', error);
+    return false;
+  }
+}
+
+// 🎯 TODAS LAS DEMÁS FUNCIONES SE MANTIENEN IGUAL
 export async function register(req, res) {
   const { nombre, usuario, contrasena, correo } = req.body;
   try {

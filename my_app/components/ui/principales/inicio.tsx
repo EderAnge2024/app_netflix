@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, JSX } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -64,10 +64,10 @@ export default function HomeScreen(): JSX.Element {
         const next = featuredList.length > 0 ? (prev + 1) % featuredList.length : prev;
         try {
           // scrollToIndex puede lanzar si el índice está fuera de rango
-          bannerRef.current?.scrollToIndex({ index: next, animated: true });
+          bannerRef.current?.scrollToIndex({ index: next, animated: true } as any);
         } catch (e) {
           // Fallback: calcular offset
-          bannerRef.current?.scrollToOffset({ offset: next * width, animated: true });
+          bannerRef.current?.scrollToOffset?.({ offset: next * width, animated: true } as any);
         }
         return next;
       });
