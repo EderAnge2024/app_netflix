@@ -2,21 +2,65 @@ import { createUser, findUser, findUserByEmail, updatePassword, createVerificati
 import nodemailer from 'nodemailer'
 import dotenv from 'dotenv'
 
-dotenv.config(); // para leer variable de entorno
+dotenv.config();
 
-// 📧 Función REAL para enviar correos
+// 📧 Configuración MEJORADA del transporter (con pool y timeouts)
+const createTransporter = () => {
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_APP_PASSWORD
+    },
+    // MEJORAS PARA CONECTIVIDAD
+    connectionTimeout: 30000, // 30 segundos
+    socketTimeout: 30000,
+    greetingTimeout: 30000,
+    pool: true, // Conexiones persistentes
+    maxConnections: 3,
+    maxMessages: 50
+  });
+};
+
+// 🔄 Función con reintentos inteligentes
+const sendEmailWithRetry = async (mailOptions, maxRetries = 3) => {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const transporter = createTransporter();
+    
+    try {
+      console.log(`📧 Intento ${attempt} de enviar correo a: ${mailOptions.to}`);
+      
+      const result = await transporter.sendMail(mailOptions);
+      console.log(`✅ Correo REAL enviado a: ${mailOptions.to}`);
+      console.log(`📫 ID del mensaje: ${result.messageId}`);
+      
+      await transporter.close(); // Cerrar conexión
+      return { success: true, messageId: result.messageId };
+      
+    } catch (error) {
+      console.error(`❌ Intento ${attempt} fallado:`, error.code);
+      
+      // Cerrar transporter en caso de error
+      try { await transporter.close(); } catch (e) {}
+      
+      // Si es el último intento, lanzar el error
+      if (attempt === maxRetries) {
+        console.error('🚨 Todos los intentos fallaron para:', mailOptions.to);
+        throw error;
+      }
+      
+      // Espera progresiva antes del reintento
+      const waitTime = Math.pow(2, attempt) * 1000;
+      console.log(`⏳ Reintentando en ${waitTime/1000} segundos...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+  }
+};
+
+// 📧 Función MEJORADA para enviar correos (con reintentos)
 const sendVerificationCode = async (correo, codigo) => {
   try {
-    // Configurar el transporter con TU contraseña de aplicación
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.GMAIL_USER,  // ← Tu correo en .env
-        pass: process.env.GMAIL_APP_PASSWORD  // ← Tu contraseña SIN espacios en .env
-      }
-    });
-
-    // Configurar el contenido del correo
+    // Configurar el contenido del correo (IGUAL QUE ANTES)
     const mailOptions = {
       from: `"Sistema de Verificación" <${process.env.GMAIL_USER}>`,
       to: correo,
@@ -37,12 +81,9 @@ const sendVerificationCode = async (correo, codigo) => {
       `
     };
 
-    // Enviar el correo
-    const result = await transporter.sendMail(mailOptions);
-    console.log(`✅ Correo REAL enviado a: ${correo}`);
-    console.log(`📫 ID del mensaje: ${result.messageId}`);
-    
-    return { success: true, messageId: result.messageId };
+    // Enviar el correo CON REINTENTOS
+    const result = await sendEmailWithRetry(mailOptions, 3);
+    return result;
     
   } catch (error) {
     console.error('❌ Error enviando correo REAL:', error);
@@ -50,6 +91,21 @@ const sendVerificationCode = async (correo, codigo) => {
   }
 };
 
+// 🔧 Función para verificar conexión SMTP (opcional)
+export async function verifySMTPConnection() {
+  try {
+    const transporter = createTransporter();
+    await transporter.verify();
+    console.log('✅ Conexión SMTP verificada correctamente');
+    await transporter.close();
+    return true;
+  } catch (error) {
+    console.error('❌ Error verificando conexión SMTP:', error);
+    return false;
+  }
+}
+
+// 🎯 TODAS LAS DEMÁS FUNCIONES SE MANTIENEN IGUAL
 export async function register(req, res) {
   const { nombre, usuario, contrasena, correo } = req.body;
   try {
@@ -111,7 +167,7 @@ export async function requestCode(req, res) {
     // Guardar código en la base de datos
     await createVerificationCode(correo, codigo);
 
-    // Enviar código por mensajería
+    // Enviar código por mensajería (CON LA NUEVA FUNCIÓN MEJORADA)
     await sendVerificationCode(correo, codigo);
 
     res.json({ 
@@ -211,7 +267,7 @@ export async function verifyCodeOnly(req, res) {
   }
 }
 
-// 🔍 Verificar si correo existe (puedes mantener esta función si la necesitas)
+// 🔍 Verificar si correo existe
 export async function verifyEmail(req, res) {
   const { correo } = req.body;
 
