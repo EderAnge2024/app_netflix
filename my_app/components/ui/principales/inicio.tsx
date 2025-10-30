@@ -263,7 +263,15 @@ export default function HomeScreen(): JSX.Element {
                   />
                 </View>
               ) : (
-                <Text style={styles.noTrailer}>Tráiler no disponible</Text>
+                <View style={styles.trailerContainer}>
+                  <Image
+                    source={{ 
+                      uri: `${IMAGE_BASE_URL}${selectedItem.backdrop_path || selectedItem.poster_path}` 
+                    }}
+                    style={styles.fallbackImage}
+                    resizeMode="cover"
+                  />
+                </View>
               )}
 
               <Text style={styles.modalOverview}>
@@ -391,4 +399,9 @@ const styles = StyleSheet.create({
   modalCloseText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
   myListButton: { paddingVertical: 10, paddingHorizontal: 25, borderRadius: 8, marginTop: 10 },
   myListText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
+  fallbackImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 10,
+  },
 });

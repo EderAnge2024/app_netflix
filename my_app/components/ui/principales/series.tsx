@@ -48,7 +48,6 @@ const SeriesSection = () => {
   const [selectedSerie, setSelectedSerie] = useState<MediaItem | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
 
-  const [trailerVisible, setTrailerVisible] = useState(false);
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
 
   const trailerUrl = useMemo(
@@ -119,19 +118,6 @@ const SeriesSection = () => {
       }
     },
     [isInMyList, addToMyList, removeFromMyList]
-  );
-
-  const openTrailer = useCallback(
-    async (serieId: number) => {
-      const key = await fetchTrailer(serieId);
-      if (key) {
-        setTrailerKey(key);
-        setTrailerVisible(true);
-      } else {
-        Alert.alert("Tráiler no disponible", "Esta serie no tiene tráiler disponible.");
-      }
-    },
-    [fetchTrailer]
   );
 
   const openModal = useCallback(
@@ -263,7 +249,7 @@ const SeriesSection = () => {
                 <Pressable style={styles.featuredButton} onPress={() => openModal(featuredSerie)}>
                   <Text style={styles.featuredButtonText}>Ver más</Text>
                 </Pressable>
-                <Pressable style={styles.featuredButtonPlay} onPress={() => openTrailer(featuredSerie.id)}>
+                <Pressable style={styles.featuredButtonPlay} onPress={() => openModal(featuredSerie)}>
                   <Text style={styles.featuredButtonPlayText}>▶ Reproducir</Text>
                 </Pressable>
               </View>
@@ -285,14 +271,34 @@ const SeriesSection = () => {
         ))}
       </ScrollView>
 
-      <Modal visible={modalVisible} animationType="fade" transparent onRequestClose={() => setModalVisible(false)}>
+      <Modal visible={modalVisible} animationType="fade" transparent onRequestClose={() => { setModalVisible(false); setTrailerKey(null); }}>
         <View style={styles.modalBackground}>
           {selectedSerie && (
             <View style={styles.modalContainer}>
-              <Image
-                source={{ uri: `${IMAGE_BASE_URL}${selectedSerie.backdrop_path || selectedSerie.poster_path}` }}
-                style={styles.modalImage}
-              />
+              {/*
+                Si tenemos trailerKey (trailerUrl), incrustamos el WebView con autoplay.
+                Si no hay trailer, mostramos la imagen de fallback como antes.
+              */}
+              {trailerUrl ? (
+                <View style={{ width: width - 80, height: 200, borderRadius: 10, overflow: "hidden", marginBottom: 15 }}>
+                  <WebView
+                    source={{ uri: `${trailerUrl}?autoplay=1&playsinline=1&rel=0&modestbranding=1` }}
+                    style={{ flex: 1 }}
+                    allowsFullscreenVideo
+                    mediaPlaybackRequiresUserAction={false}
+                    javaScriptEnabled
+                    domStorageEnabled
+                    startInLoadingState
+                    allowsInlineMediaPlayback
+                  />
+                </View>
+              ) : (
+                <Image
+                  source={{ uri: `${IMAGE_BASE_URL}${selectedSerie.backdrop_path || selectedSerie.poster_path}` }}
+                  style={styles.modalImage}
+                />
+              )}
+
               <Text style={styles.modalTitle}>{selectedSerie.name}</Text>
               <Text style={styles.modalInfo}>
                 ⭐ {selectedSerie.vote_average?.toFixed(1) || "N/A"}  {"  "} | {"  "} 🗓️ {selectedSerie.first_air_date || "Fecha no disponible"}
@@ -309,31 +315,18 @@ const SeriesSection = () => {
                   </Text>
                 </Pressable>
 
-                <Pressable style={styles.trailerButton} onPress={() => openTrailer(selectedSerie.id)}>
-                  <Text style={styles.trailerButtonText}>▶ Ver tráiler</Text>
-                </Pressable>
+                {/* Se eliminó el botón "Ver tráiler" */}
               </View>
 
-              <Pressable style={styles.modalCloseButton} onPress={() => setModalVisible(false)}>
+              {/* Botón Cerrar (restaurado) */}
+              <Pressable
+                style={styles.modalCloseButton}
+                onPress={() => { setModalVisible(false); setTrailerKey(null); }}
+              >
                 <Text style={styles.modalCloseText}>Cerrar</Text>
               </Pressable>
             </View>
           )}
-        </View>
-      </Modal>
-
-      <Modal visible={trailerVisible} animationType="slide" transparent onRequestClose={() => setTrailerVisible(false)}>
-        <View style={styles.trailerModalBackground}>
-          <View style={styles.trailerContainer}>
-            {trailerUrl ? (
-              <WebView source={{ uri: `${trailerUrl}?autoplay=1` }} style={{ flex: 1, borderRadius: 10 }} allowsFullscreenVideo />
-            ) : (
-              <Text style={{ color: "#fff" }}>Cargando tráiler...</Text>
-            )}
-            <Pressable style={styles.trailerCloseButton} onPress={() => setTrailerVisible(false)}>
-              <Text style={styles.trailerCloseText}>Cerrar</Text>
-            </Pressable>
-          </View>
         </View>
       </Modal>
     </View>
@@ -400,11 +393,6 @@ const styles = StyleSheet.create({
   trailerButtonText: { color: "#fff", fontWeight: "bold", fontSize: 14 },
   modalCloseButton: { marginTop: 15, backgroundColor: "#E50914", paddingVertical: 10, paddingHorizontal: 25, borderRadius: 8 },
   modalCloseText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
-
-  trailerModalBackground: { flex: 1, backgroundColor: "rgba(0,0,0,0.9)", justifyContent: "center", alignItems: "center" },
-  trailerContainer: { width: width - 40, height: 250, backgroundColor: "#000", borderRadius: 10, overflow: "hidden" },
-  trailerCloseButton: { position: "absolute", top: 10, right: 10, backgroundColor: "#E50914", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
-  trailerCloseText: { color: "#fff", fontWeight: "bold" },
 });
 
 export default SeriesSection;

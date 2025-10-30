@@ -142,11 +142,11 @@ export default function PeliculasScreen(): JSX.Element {
 
   // Buscar trailer (Youtube) y abrir modal
   const openModal = async (movie: Movie): Promise<void> => {
-    setSelectedMovie(movie);
-    setModalVisible(true);
-    // buscar trailer
+    // Limpiar estados y buscar trailer PRIMERO para que el modal abra con el video listo
+    setSelectedMovie(null);
     setTrailerKey(null);
     setFetchingTrailer(true);
+
     try {
       const res = await fetch(`${BASE_URL}/movie/${movie.id}/videos?api_key=${API_KEY}&language=es-ES`);
       const data = await res.json();
@@ -157,6 +157,9 @@ export default function PeliculasScreen(): JSX.Element {
       setTrailerKey(null);
     } finally {
       setFetchingTrailer(false);
+      // setSelectedMovie y abrir modal después de intentar obtener trailer
+      setSelectedMovie(movie);
+      setModalVisible(true);
     }
   };
 
@@ -257,6 +260,7 @@ export default function PeliculasScreen(): JSX.Element {
                 uri: `${IMAGE_BASE_URL}${featuredMovie.backdrop_path || featuredMovie.poster_path}`,
               }}
               style={styles.featuredImage}
+              resizeMode="cover"
             />
             <View style={styles.overlaySeries}>
               <Text style={styles.featuredTitle}>{featuredMovie.title}</Text>
@@ -268,9 +272,10 @@ export default function PeliculasScreen(): JSX.Element {
                 {featuredMovie.overview}
               </Text>
               <View style={styles.featuredButtonsContainerSeries}>
+                {/* Abrir modal y reproducir dentro del modal si hay tráiler */}
                 <TouchableOpacity
                   style={styles.playButtonSeries}
-                  onPress={() => openTrailer(featuredMovie.id)}
+                  onPress={() => openModal(featuredMovie)}
                 >
                   <Text style={styles.playButtonTextSeries}>▶ Reproducir</Text>
                 </TouchableOpacity>
@@ -285,7 +290,7 @@ export default function PeliculasScreen(): JSX.Element {
           </View>
         )}
 
-        <Text style={styles.mainTitle}>Películas por género</Text>
+        {/* (Se eliminó el título fijo "Películas por género" para mostrar la UI igual que en Series) */}
 
         {orderedGenres.map((genreName) => (
           <View key={genreName} style={styles.section}>
@@ -311,12 +316,34 @@ export default function PeliculasScreen(): JSX.Element {
         <View style={styles.modalOverlay}>
           {selectedMovie && (
             <View style={styles.modalContent}>
-              <Image
-                source={{
-                  uri: `${IMAGE_BASE_URL}${selectedMovie.backdrop_path || selectedMovie.poster_path}`,
-                }}
-                style={styles.modalImage}
-              />
+              {/* Si se está buscando el tráiler, mostrar loader.
+              Si trailerKey existe incrustar WebView con autoplay.
+              Si no hay trailer mostrar imagen fallback. */}
+              {fetchingTrailer ? (
+                <View style={{ width: "100%", height: 260, justifyContent: "center", alignItems: "center" }}>
+                  <ActivityIndicator size="large" color="#E50914" />
+                </View>
+              ) : trailerKey ? (
+                <View style={{ width: "100%", height: 260, borderRadius: 10, overflow: "hidden", marginBottom: 12 }}>
+                  <WebView
+                    source={{ uri: `https://www.youtube.com/embed/${trailerKey}?autoplay=1&playsinline=1&rel=0&modestbranding=1` }}
+                    style={{ flex: 1 }}
+                    allowsFullscreenVideo
+                    mediaPlaybackRequiresUserAction={false}
+                    javaScriptEnabled
+                    domStorageEnabled
+                    startInLoadingState
+                    allowsInlineMediaPlayback
+                  />
+                </View>
+              ) : (
+                <Image
+                  source={{
+                    uri: `${IMAGE_BASE_URL}${selectedMovie.backdrop_path || selectedMovie.poster_path}`,
+                  }}
+                  style={[styles.modalImage, { height: 260 }]}
+                />
+              )}
 
               <Text style={styles.modalTitle}>{selectedMovie.title}</Text>
 
@@ -329,7 +356,7 @@ export default function PeliculasScreen(): JSX.Element {
                 {selectedMovie.overview || "Sin descripción disponible."}
               </Text>
 
-              {/* Botones */}
+              {/* Botones: solo Mi Lista (y Cerrar). Se eliminó el botón "Ver Tráiler" */}
               <View style={styles.modalButtonsContainer}>
                 <Pressable
                   style={[
@@ -341,13 +368,6 @@ export default function PeliculasScreen(): JSX.Element {
                   <Text style={styles.myListButtonText}>
                     {isInMyList?.(selectedMovie.id) ? "Eliminar de Mi Lista" : "Agregar a Mi Lista"}
                   </Text>
-                </Pressable>
-
-                <Pressable
-                  style={styles.trailerButton}
-                  onPress={() => openTrailer(selectedMovie.id)}
-                >
-                  <Text style={styles.trailerButtonText}>Ver Tráiler</Text>
                 </Pressable>
               </View>
 
@@ -401,18 +421,17 @@ const styles = StyleSheet.create({
   dropdownText: { color: "#ccc", fontSize: 15 },
   dropdownTextActive: { color: "#fff", fontWeight: "bold" },
 
-  // Banner principal
-  featuredImage: { width: "100%", height: 220, borderRadius: 10, marginBottom: 15 },
-  overlay: {
+  // Featured (como en Series) - tamaño ajustado
+  featuredContainer: { width: "100%", height: 480, marginBottom: 20, position: "relative" },
+  featuredImage: { width: "100%", height: "100%" },
+  overlaySeries: {
     position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    padding: 20,
-    borderBottomLeftRadius: 10,
-    borderBottomRightRadius: 10,
-    alignItems: "flex-start",
+    bottom: 28,
+    left: 18,
+    right: 18,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    padding: 14,
+    borderRadius: 8,
   },
   featuredTitle: {
     color: "#fff",
@@ -421,9 +440,9 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   featuredInfo: {
-    color: "#ccc",
+    color: "#ffcc00",
     fontSize: 14,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   featuredOverview: {
     color: "#fff",
@@ -476,7 +495,7 @@ const styles = StyleSheet.create({
   modalImage: { width: "100%", height: 180, borderRadius: 10, marginBottom: 10 },
   modalInfo: { color: "#ccc", fontSize: 14, marginBottom: 10 },
   modalOverview: { color: "#ddd", fontSize: 14, marginBottom: 15, textAlign: "center", lineHeight: 20 },
-  closeButton: { backgroundColor: "#E50914", paddingVertical: 8, borderRadius: 5, alignItems: "center", width: "50%" },
+  closeButton: { backgroundColor: "#E50914", paddingVertical: 10, borderRadius: 6, alignItems: "center", width: "50%" },
   closeButtonText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
 
   // botones modal
