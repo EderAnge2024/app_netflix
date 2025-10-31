@@ -12,13 +12,16 @@ import {
   Pressable,
   Dimensions,
   Alert,
+  Linking, // 🔹 CAMBIO: Añadido Linking
 } from "react-native";
-import { WebView } from "react-native-webview";
+// import { WebView } from "react-native-webview"; // 🔹 CAMBIO: Eliminado WebView
+import YoutubePlayer from "react-native-youtube-iframe"; // 🔹 CAMBIO: Importado YoutubePlayer
 import { API_KEY, BASE_URL, IMAGE_BASE_URL } from "@/service/apiThemoviedb";
 import { useMyList, MediaItem } from "@/components/ui/logeadoDatos/MyListContext";
 
 const { width } = Dimensions.get("window");
 
+// ... (Interfaces Genre, Video, SeriesByGenre - sin cambios) ...
 interface Genre {
   id: number;
   name: string;
@@ -38,6 +41,7 @@ interface SeriesByGenre {
 const SeriesSection = () => {
   const { myList, addToMyList, removeFromMyList, isInMyList, loading: listLoading } = useMyList();
 
+  // ... (Estados de genres, seriesByGenre, etc. - sin cambios) ...
   const [genres, setGenres] = useState<Genre[]>([]);
   const [seriesByGenre, setSeriesByGenre] = useState<SeriesByGenre>({});
   const [selectedGenre, setSelectedGenre] = useState<Genre | null>(null);
@@ -50,12 +54,16 @@ const SeriesSection = () => {
 
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
 
-  const trailerUrl = useMemo(
-    () => (trailerKey ? `https://www.youtube.com/embed/${trailerKey}` : null),
-    [trailerKey]
-  );
+  // 🔹 CAMBIO: Estados del reproductor (copiados de HomeScreen)
+  const [isTrailerLoading, setIsTrailerLoading] = useState(false);
+  const [webviewError, setWebviewError] = useState(false);
+  const [playing, setPlaying] = useState(false);
+
+  // 🔹 CAMBIO: Eliminado trailerUrl (ya no se necesita)
+  // const trailerUrl = useMemo(...)
 
   // --- API helpers ---
+  // ... (fetchGenres, fetchSeriesByGenre, fetchTrailer - sin cambios) ...
   const fetchGenres = useCallback(async (): Promise<Genre[]> => {
     try {
       const res = await fetch(`${BASE_URL}/genre/tv/list?api_key=${API_KEY}&language=es-ES`);
@@ -91,6 +99,15 @@ const SeriesSection = () => {
   }, []);
 
   // --- Handlers ---
+
+  // 🔹 CAMBIO: Añadido onStateChange (copiado de HomeScreen)
+  const onStateChange = useCallback((state: string) => {
+    if (state === "ended" || state === "paused") setPlaying(false);
+    if (state === "playing") setPlaying(true);
+    if (state === "error") setWebviewError(true);
+  }, []);
+  
+  // ... (handleMyList - sin cambios) ...
   const handleMyList = useCallback(
     async (serie: MediaItem) => {
       const normalizedSerie: MediaItem = {
@@ -120,18 +137,29 @@ const SeriesSection = () => {
     [isInMyList, addToMyList, removeFromMyList]
   );
 
+  // 🔹 CAMBIO: openModal actualizado (como en HomeScreen)
   const openModal = useCallback(
     async (serie: MediaItem) => {
+      setWebviewError(false);
+      setPlaying(false);
       setSelectedSerie(serie);
-      // intenta precargar tráiler para mejorar respuesta al abrir desde modal (no obligatorio)
-      const key = await fetchTrailer(serie.id);
-      if (key) setTrailerKey(key);
       setModalVisible(true);
+      setIsTrailerLoading(true); // Iniciar carga
+      const key = await fetchTrailer(serie.id);
+      setTrailerKey(key);
+      setIsTrailerLoading(false); // Finalizar carga
     },
     [fetchTrailer]
   );
 
-  // --- Load data once ---
+  // 🔹 CAMBIO: Añadido closeModal (como en HomeScreen)
+  const closeModal = () => {
+    setModalVisible(false);
+    setTrailerKey(null);
+    setPlaying(false);
+  };
+
+  // ... (useEffect de carga de datos y featuredSerie - sin cambios) ...
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
@@ -140,7 +168,6 @@ const SeriesSection = () => {
         setGenres(loadedGenres);
         if (loadedGenres.length === 0) return;
 
-        // obtener series por cada género en paralelo
         const results = await Promise.all(
           loadedGenres.map(async (g) => {
             const s = await fetchSeriesByGenre(g.id);
@@ -166,13 +193,13 @@ const SeriesSection = () => {
     loadData();
   }, [fetchGenres, fetchSeriesByGenre]);
 
-  // actualiza featuredSerie cuando cambia selectedGenre o seriesByGenre
   useEffect(() => {
     if (selectedGenre && seriesByGenre[selectedGenre.name]?.length > 0) {
       setFeaturedSerie(seriesByGenre[selectedGenre.name][0]);
     }
   }, [selectedGenre, seriesByGenre]);
 
+  // ... (renderSerie, loading, orderedGenres - sin cambios) ...
   const renderSerie = ({ item }: { item: MediaItem }) => (
     <TouchableOpacity style={styles.serieCard} onPress={() => openModal(item)}>
       <Image
@@ -200,6 +227,7 @@ const SeriesSection = () => {
     ? [selectedGenre.name, ...Object.keys(seriesByGenre).filter((g) => g !== selectedGenre.name)]
     : Object.keys(seriesByGenre);
 
+  // ... (JSX de la pantalla principal: Header, Dropdown, ScrollView - sin cambios) ...
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -239,7 +267,7 @@ const SeriesSection = () => {
             <View style={styles.featuredInfoContainer}>
               <Text style={styles.featuredTitle}>{featuredSerie.name}</Text>
               <Text style={styles.featuredDetails}>
-                ⭐ {featuredSerie.vote_average?.toFixed(1) || "N/A"}  {"  "} | {"  "} 🗓️ {featuredSerie.first_air_date || "Sin fecha"}
+                ⭐ {featuredSerie.vote_average?.toFixed(1) || "N/A"}   |   🗓️ {featuredSerie.first_air_date || "Sin fecha"}
               </Text>
               <Text style={styles.featuredOverview} numberOfLines={4}>
                 {featuredSerie.overview || "Sin descripción disponible."}
@@ -271,37 +299,60 @@ const SeriesSection = () => {
         ))}
       </ScrollView>
 
-      <Modal visible={modalVisible} animationType="fade" transparent onRequestClose={() => { setModalVisible(false); setTrailerKey(null); }}>
+      {/* 🔹 CAMBIO: Modal completamente reemplazado con la lógica de HomeScreen */}
+      <Modal
+        visible={modalVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={closeModal} // Usar la nueva función de cierre
+      >
         <View style={styles.modalBackground}>
           {selectedSerie && (
             <View style={styles.modalContainer}>
-              {/*
-                Si tenemos trailerKey (trailerUrl), incrustamos el WebView con autoplay.
-                Si no hay trailer, mostramos la imagen de fallback como antes.
-              */}
-              {trailerUrl ? (
-                <View style={{ width: width - 80, height: 200, borderRadius: 10, overflow: "hidden", marginBottom: 15 }}>
-                  <WebView
-                    source={{ uri: `${trailerUrl}?autoplay=1&playsinline=1&rel=0&modestbranding=1` }}
-                    style={{ flex: 1 }}
-                    allowsFullscreenVideo
-                    mediaPlaybackRequiresUserAction={false}
-                    javaScriptEnabled
-                    domStorageEnabled
-                    startInLoadingState
-                    allowsInlineMediaPlayback
+              <Text style={styles.modalTitle}>{selectedSerie.name}</Text>
+
+              {isTrailerLoading ? (
+                // 1. Estado de Carga
+                <ActivityIndicator color="#E50914" style={{ height: 220, marginVertical: 15 }} />
+              ) : trailerKey && !webviewError ? (
+                // 2. Éxito: Mostrar reproductor
+                <View style={styles.trailerContainer}>
+                  <YoutubePlayer
+                    height={220}
+                    play={playing}
+                    videoId={trailerKey}
+                    onChangeState={onStateChange}
+                    webViewStyle={{ opacity: 1 }}
+                    forceAndroidAutoplay={false}
                   />
                 </View>
               ) : (
-                <Image
-                  source={{ uri: `${IMAGE_BASE_URL}${selectedSerie.backdrop_path || selectedSerie.poster_path}` }}
-                  style={styles.modalImage}
-                />
+                // 3. Fallo: Mostrar imagen de fallback y botón de Linking
+                <View style={styles.trailerContainer}>
+                  <Image
+                    source={{
+                      uri: `${IMAGE_BASE_URL}${selectedSerie.backdrop_path || selectedSerie.poster_path}`
+                    }}
+                    style={styles.fallbackImage}
+                    resizeMode="cover"
+                  />
+                  {/* Botón de fallback si la key existe pero el player falló */}
+                  {webviewError && trailerKey && (
+                    <Pressable
+                      onPress={() => {
+                        const url = `https://www.youtube.com/watch?v=${trailerKey}`;
+                        Linking.openURL(url).catch((e) => console.error("Linking error", e));
+                      }}
+                      style={styles.youtubeButton} // Estilo nuevo
+                    >
+                      <Text style={styles.youtubeButtonText}>Abrir en YouTube</Text>
+                    </Pressable>
+                  )}
+                </View>
               )}
 
-              <Text style={styles.modalTitle}>{selectedSerie.name}</Text>
               <Text style={styles.modalInfo}>
-                ⭐ {selectedSerie.vote_average?.toFixed(1) || "N/A"}  {"  "} | {"  "} 🗓️ {selectedSerie.first_air_date || "Fecha no disponible"}
+                ⭐ {selectedSerie.vote_average?.toFixed(1) || "N/A"}   |   🗓️ {selectedSerie.first_air_date || "Fecha no disponible"}
               </Text>
               <Text style={styles.modalOverview}>{selectedSerie.overview || "Sin descripción disponible."}</Text>
 
@@ -314,14 +365,11 @@ const SeriesSection = () => {
                     {isInMyList(selectedSerie.id) ? "Eliminar de mi lista" : "Agregar a mi lista"}
                   </Text>
                 </Pressable>
-
-                {/* Se eliminó el botón "Ver tráiler" */}
               </View>
 
-              {/* Botón Cerrar (restaurado) */}
               <Pressable
                 style={styles.modalCloseButton}
-                onPress={() => { setModalVisible(false); setTrailerKey(null); }}
+                onPress={closeModal} // Usar la nueva función de cierre
               >
                 <Text style={styles.modalCloseText}>Cerrar</Text>
               </Pressable>
@@ -334,10 +382,10 @@ const SeriesSection = () => {
 };
 
 const styles = StyleSheet.create({
+  // ... (Estilos container, loader, header, dropdown, featured, section, serieCard - sin cambios) ...
   container: { flex: 1, backgroundColor: "#141414" },
   loaderContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   loaderText: { color: "#fff", marginTop: 10 },
-
   header: {
     backgroundColor: "#141414",
     flexDirection: "row",
@@ -360,7 +408,6 @@ const styles = StyleSheet.create({
   dropdownItem: { paddingVertical: 8, paddingHorizontal: 12 },
   dropdownText: { color: "#ccc", fontSize: 15 },
   dropdownTextActive: { color: "#fff", fontWeight: "bold" },
-
   featuredContainer: { width: "100%", height: 500, marginBottom: 20, position: "relative" },
   featuredImage: { width: "100%", height: "100%", borderRadius: 0 },
   featuredInfoContainer: { position: "absolute", bottom: 40, left: 25, right: 25 },
@@ -372,16 +419,37 @@ const styles = StyleSheet.create({
   featuredButtonText: { color: "#fff", fontWeight: "bold", fontSize: 14 },
   featuredButtonPlay: { backgroundColor: "#fff", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 5 },
   featuredButtonPlayText: { color: "#000", fontWeight: "bold", fontSize: 14 },
-
   section: { marginBottom: 30 },
   sectionTitle: { color: "#fff", fontSize: 18, fontWeight: "bold", marginLeft: 15, marginBottom: 10 },
   serieCard: { marginHorizontal: 8, width: 120 },
   serieImage: { width: 120, height: 180, borderRadius: 8 },
   serieTitle: { color: "#fff", fontSize: 12, textAlign: "center", marginTop: 5 },
 
+  // --- 🔹 CAMBIOS EN ESTILOS DEL MODAL ---
   modalBackground: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "center", padding: 20 },
   modalContainer: { backgroundColor: "#222", borderRadius: 10, padding: 20, alignItems: "center" },
-  modalImage: { width: width - 80, height: 200, borderRadius: 10, marginBottom: 15 },
+  
+  // 🔹 CAMBIO: Añadido trailerContainer (copiado de HomeScreen)
+  trailerContainer: {
+    width: width - 80, // Ancho consistente
+    height: 220, // Alto consistente
+    borderRadius: 10,
+    overflow: "hidden",
+    marginBottom: 15,
+    backgroundColor: '#000', // Fondo mientras carga
+    position: 'relative', // Para el botón de fallback
+  },
+
+  // 🔹 CAMBIO: Añadido fallbackImage (copiado de HomeScreen)
+  fallbackImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 10,
+  },
+
+  // 🔹 CAMBIO: Eliminado modalImage (reemplazado por trailerContainer/fallbackImage)
+  // modalImage: { width: width - 80, height: 200, borderRadius: 10, marginBottom: 15 }, 
+
   modalTitle: { color: "#fff", fontSize: 24, fontWeight: "bold", marginBottom: 8, textAlign: "center" },
   modalInfo: { color: "#ccc", fontSize: 14, marginBottom: 10 },
   modalOverview: { color: "#ddd", fontSize: 14, textAlign: "center" },
@@ -389,10 +457,24 @@ const styles = StyleSheet.create({
   addButton: { backgroundColor: "#e40a0aff", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
   addButtonActive: { backgroundColor: "#393939ff" },
   addButtonText: { color: "#fff", fontWeight: "bold", fontSize: 14 },
-  trailerButton: { backgroundColor: "#E50914", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
-  trailerButtonText: { color: "#fff", fontWeight: "bold", fontSize: 14 },
+  
   modalCloseButton: { marginTop: 15, backgroundColor: "#E50914", paddingVertical: 10, paddingHorizontal: 25, borderRadius: 8 },
   modalCloseText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
+
+  // 🔹 CAMBIO: Estilos añadidos para el botón de fallback (como en HomeScreen)
+  youtubeButton: {
+    position: "absolute",
+    bottom: 12,
+    right: 12,
+    backgroundColor: "#E50914",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  youtubeButtonText: { 
+    color: "#fff", 
+    fontWeight: "bold" 
+  },
 });
 
 export default SeriesSection;

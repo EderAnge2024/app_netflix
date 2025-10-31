@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, JSX } from "react";
+import React, { useEffect, useState, useRef, JSX, useCallback } from "react";
 import {
   View,
   Text,
@@ -11,8 +11,10 @@ import {
   Pressable,
   Dimensions,
   ActivityIndicator,
+  Linking,
 } from "react-native";
 import { WebView } from "react-native-webview";
+import YoutubePlayer from "react-native-youtube-iframe";
 import { API_KEY, BASE_URL, IMAGE_BASE_URL } from "@/service/apiThemoviedb";
 import { useMyList } from "@/components/ui/logeadoDatos/MyListContext";
 
@@ -52,6 +54,8 @@ export default function HomeScreen(): JSX.Element {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
   const [isTrailerLoading, setIsTrailerLoading] = useState(false);
+  const [webviewError, setWebviewError] = useState(false);
+  const [playing, setPlaying] = useState(false);
 
   const bannerRef = useRef<FlatList<MediaItem> | null>(null);
 
@@ -144,7 +148,10 @@ export default function HomeScreen(): JSX.Element {
     }
   };
 
+  // abrir modal
   const openModal = async (item: MediaItem) => {
+    setWebviewError(false);
+    setPlaying(false);
     setSelectedItem(item);
     setModalVisible(true);
     setIsTrailerLoading(true);
@@ -152,6 +159,20 @@ export default function HomeScreen(): JSX.Element {
     setTrailerKey(key);
     setIsTrailerLoading(false);
   };
+
+  // opcional: detener reproducción al cerrar modal
+  const closeModal = () => {
+    setModalVisible(false);
+    setTrailerKey(null);
+    setPlaying(false);
+  };
+
+  // callback para controlar estados del player
+  const onStateChange = useCallback((state: string) => {
+    if (state === "ended" || state === "paused") setPlaying(false);
+    if (state === "playing") setPlaying(true);
+    if (state === "error") setWebviewError(true);
+  }, []);
 
   if (loading || listLoading) {
     return (
@@ -252,25 +273,49 @@ export default function HomeScreen(): JSX.Element {
           {selectedItem && (
             <View style={styles.modalContainer}>
               <Text style={styles.modalTitle}>{selectedItem.title || selectedItem.name}</Text>
+
               {isTrailerLoading ? (
                 <ActivityIndicator color="#E50914" style={{ marginVertical: 15 }} />
-              ) : trailerKey ? (
+              ) : trailerKey && !webviewError ? (
                 <View style={styles.trailerContainer}>
-                  <WebView
-                    source={{ uri: `https://www.youtube.com/embed/${trailerKey}` }}
-                    allowsFullscreenVideo
-                    style={{ flex: 1 }}
+                  <YoutubePlayer
+                    height={220}
+                    play={playing}
+                    videoId={trailerKey}
+                    onChangeState={onStateChange}
+                    webViewStyle={{ opacity: 1 }}
+                    forceAndroidAutoplay={false}
                   />
+                  {/* Botón de play/pausa eliminado */}
                 </View>
               ) : (
                 <View style={styles.trailerContainer}>
                   <Image
-                    source={{ 
-                      uri: `${IMAGE_BASE_URL}${selectedItem.backdrop_path || selectedItem.poster_path}` 
+                    source={{
+                      uri: `${IMAGE_BASE_URL}${selectedItem.backdrop_path || selectedItem.poster_path}`
                     }}
                     style={styles.fallbackImage}
                     resizeMode="cover"
                   />
+                  {webviewError && trailerKey && (
+                    <Pressable
+                      onPress={() => {
+                        const url = `https://www.youtube.com/watch?v=${trailerKey}`;
+                        Linking.openURL(url).catch((e) => console.error("Linking error", e));
+                      }}
+                      style={{
+                        position: "absolute",
+                        bottom: 12,
+                        right: 12,
+                        backgroundColor: "#E50914",
+                        paddingVertical: 8,
+                        paddingHorizontal: 12,
+                        borderRadius: 6,
+                      }}
+                    >
+                      <Text style={{ color: "#fff", fontWeight: "bold" }}>Abrir en YouTube</Text>
+                    </Pressable>
+                  )}
                 </View>
               )}
 

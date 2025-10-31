@@ -1,4 +1,4 @@
-import React, { JSX, useEffect, useState } from "react";
+import React, { JSX, useEffect, useState, useCallback } from "react"; // 🔹 CAMBIO: Añadido useCallback
 import {
   View,
   Text,
@@ -16,10 +16,12 @@ import {
 } from "react-native";
 import { API_KEY, BASE_URL, IMAGE_BASE_URL } from "@/service/apiThemoviedb";
 import { useMyList, MediaItem } from "@/components/ui/logeadoDatos/MyListContext";
-import { WebView } from "react-native-webview";
+// import { WebView } from "react-native-webview"; // 🔹 CAMBIO: Eliminado WebView
+import YoutubePlayer from "react-native-youtube-iframe"; // 🔹 CAMBIO: Importado YoutubePlayer
 
 const { width } = Dimensions.get("window");
 
+// ... (Interfaces Genre, Movie, MoviesByGenre - sin cambios) ...
 interface Genre {
   id: number;
   name: string;
@@ -36,10 +38,12 @@ interface Movie extends MediaItem {
 
 type MoviesByGenre = Record<string, Movie[]>;
 
+
 export default function PeliculasScreen(): JSX.Element {
   // Contexto Mi Lista
   const { addToMyList, removeFromMyList, isInMyList, loading: listLoading } = useMyList() as any;
 
+  // ... (Estados de géneros, películas, etc. - sin cambios) ...
   const [genres, setGenres] = useState<Genre[]>([]);
   const [moviesByGenre, setMoviesByGenre] = useState<MoviesByGenre>({});
   const [selectedGenre, setSelectedGenre] = useState<Genre | null>(null);
@@ -51,9 +55,13 @@ export default function PeliculasScreen(): JSX.Element {
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
-  const [fetchingTrailer, setFetchingTrailer] = useState(false);
+  
+  // 🔹 CAMBIO: Estados del reproductor (reemplazan a fetchingTrailer)
+  const [isTrailerLoading, setIsTrailerLoading] = useState(false);
+  const [webviewError, setWebviewError] = useState(false);
+  const [playing, setPlaying] = useState(false);
 
-  // Obtener géneros
+  // ... (fetchGenres, fetchMoviesByGenre - sin cambios) ...
   const fetchGenres = async (): Promise<void> => {
     try {
       const res = await fetch(`${BASE_URL}/genre/movie/list?api_key=${API_KEY}&language=es-ES`);
@@ -66,7 +74,6 @@ export default function PeliculasScreen(): JSX.Element {
     }
   };
 
-  // Obtener películas por género
   const fetchMoviesByGenre = async (genreId: number): Promise<Movie[]> => {
     try {
       const res = await fetch(
@@ -79,8 +86,7 @@ export default function PeliculasScreen(): JSX.Element {
       return [];
     }
   };
-
-  // Cargar géneros inicialmente
+  // ... (useEffect de carga de géneros y películas - sin cambios) ...
   useEffect(() => {
     setLoading(true);
     fetchGenres().finally(() => {
@@ -88,7 +94,6 @@ export default function PeliculasScreen(): JSX.Element {
     });
   }, []);
 
-  // Cargar películas cuando tengamos géneros
   useEffect(() => {
     const loadMovies = async (): Promise<void> => {
       if (!genres || genres.length === 0) {
@@ -117,14 +122,13 @@ export default function PeliculasScreen(): JSX.Element {
     loadMovies();
   }, [genres]);
 
-  // Si cambia selección de género, actualizar featuredMovie
   useEffect(() => {
     if (selectedGenre && moviesByGenre[selectedGenre.name]?.length > 0) {
       setFeaturedMovie(moviesByGenre[selectedGenre.name][0]);
     }
   }, [selectedGenre, moviesByGenre]);
 
-  // Manejar Mi Lista (agregar / remover)
+  // ... (handleMyList - sin cambios) ...
   const handleMyList = async (movie: Movie): Promise<void> => {
     try {
       if (isInMyList?.(movie.id)) {
@@ -140,12 +144,20 @@ export default function PeliculasScreen(): JSX.Element {
     }
   };
 
-  // Buscar trailer (Youtube) y abrir modal
+  // 🔹 CAMBIO: Añadido onStateChange
+  const onStateChange = useCallback((state: string) => {
+    if (state === "ended" || state === "paused") setPlaying(false);
+    if (state === "playing") setPlaying(true);
+    if (state === "error") setWebviewError(true);
+  }, []);
+
+  // 🔹 CAMBIO: Lógica de openModal actualizada
   const openModal = async (movie: Movie): Promise<void> => {
-    // Limpiar estados y buscar trailer PRIMERO para que el modal abra con el video listo
-    setSelectedMovie(null);
-    setTrailerKey(null);
-    setFetchingTrailer(true);
+    setWebviewError(false);
+    setPlaying(false);
+    setSelectedMovie(movie);
+    setModalVisible(true);
+    setIsTrailerLoading(true); // Iniciar carga
 
     try {
       const res = await fetch(`${BASE_URL}/movie/${movie.id}/videos?api_key=${API_KEY}&language=es-ES`);
@@ -156,36 +168,20 @@ export default function PeliculasScreen(): JSX.Element {
       console.error("Error buscando trailer:", err);
       setTrailerKey(null);
     } finally {
-      setFetchingTrailer(false);
-      // setSelectedMovie y abrir modal después de intentar obtener trailer
-      setSelectedMovie(movie);
-      setModalVisible(true);
+      setIsTrailerLoading(false); // Finalizar carga
     }
   };
 
-  // Abrir trailer en YouTube (fallback)
-  const openTrailer = async (movieId: number): Promise<void> => {
-    try {
-      // Intentar usar el trailerKey ya buscado
-      if (trailerKey) {
-        Linking.openURL(`https://www.youtube.com/watch?v=${trailerKey}`);
-        return;
-      }
-      // Si no hay trailerKey, buscarlo rápido
-      const res = await fetch(`${BASE_URL}/movie/${movieId}/videos?api_key=${API_KEY}&language=es-ES`);
-      const data = await res.json();
-      const trailer = data?.results?.find((v: any) => v?.type === "Trailer" && v?.site === "YouTube");
-      if (trailer?.key) {
-        Linking.openURL(`https://www.youtube.com/watch?v=${trailer.key}`);
-      } else {
-        Alert.alert("Tráiler no disponible", "No se encontró un tráiler para esta película.");
-      }
-    } catch (err) {
-      console.error("Error al abrir tráiler:", err);
-      Alert.alert("Error", "No se pudo abrir el tráiler.");
-    }
+  // 🔹 CAMBIO: Añadida función closeModal
+  const closeModal = () => {
+    setModalVisible(false);
+    setTrailerKey(null);
+    setPlaying(false);
   };
 
+  // 🔹 CAMBIO: Eliminada la función openTrailer (ya no es necesaria, se maneja con el fallback)
+
+  // ... (renderMovieCard, chequeo de loading, orderedGenres - sin cambios) ...
   const renderMovieCard = ({ item }: { item: Movie }) => (
     <TouchableOpacity style={styles.card} onPress={() => openModal(item)}>
       <Image
@@ -208,12 +204,13 @@ export default function PeliculasScreen(): JSX.Element {
       </View>
     );
   }
-
-  // Ordenar géneros con el seleccionado primero (si hay)
+  
   const orderedGenres = selectedGenre
     ? [selectedGenre.name, ...Object.keys(moviesByGenre).filter((g) => g !== selectedGenre.name)]
     : Object.keys(moviesByGenre);
 
+
+  // ... (JSX de la pantalla principal: Header, Dropdown, ScrollView - sin cambios) ...
   return (
     <View style={styles.container}>
       {/* Menú de géneros */}
@@ -290,8 +287,6 @@ export default function PeliculasScreen(): JSX.Element {
           </View>
         )}
 
-        {/* (Se eliminó el título fijo "Películas por género" para mostrar la UI igual que en Series) */}
-
         {orderedGenres.map((genreName) => (
           <View key={genreName} style={styles.section}>
             <Text style={styles.sectionTitle}>{genreName}</Text>
@@ -306,44 +301,58 @@ export default function PeliculasScreen(): JSX.Element {
         ))}
       </ScrollView>
 
-      {/* Modal de detalles */}
+      {/* 🔹 CAMBIO: Modal completamente reemplazado con la lógica de YoutubePlayer */}
       <Modal
         visible={modalVisible}
         animationType="slide"
         transparent
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={closeModal} // Usar la nueva función de cierre
       >
         <View style={styles.modalOverlay}>
           {selectedMovie && (
             <View style={styles.modalContent}>
-              {/* Si se está buscando el tráiler, mostrar loader.
-              Si trailerKey existe incrustar WebView con autoplay.
-              Si no hay trailer mostrar imagen fallback. */}
-              {fetchingTrailer ? (
-                <View style={{ width: "100%", height: 260, justifyContent: "center", alignItems: "center" }}>
-                  <ActivityIndicator size="large" color="#E50914" />
-                </View>
-              ) : trailerKey ? (
-                <View style={{ width: "100%", height: 260, borderRadius: 10, overflow: "hidden", marginBottom: 12 }}>
-                  <WebView
-                    source={{ uri: `https://www.youtube.com/embed/${trailerKey}?autoplay=1&playsinline=1&rel=0&modestbranding=1` }}
-                    style={{ flex: 1 }}
-                    allowsFullscreenVideo
-                    mediaPlaybackRequiresUserAction={false}
-                    javaScriptEnabled
-                    domStorageEnabled
-                    startInLoadingState
-                    allowsInlineMediaPlayback
+              
+              {/* Lógica del reproductor */}
+              {isTrailerLoading ? (
+                // 1. Estado de Carga
+                <ActivityIndicator color="#E50914" style={{ height: 220, marginVertical: 15 }} />
+              ) : trailerKey && !webviewError ? (
+                // 2. Éxito: Mostrar reproductor
+                <View style={styles.trailerContainer}>
+                  <YoutubePlayer
+                    height={220}
+                    play={playing}
+                    videoId={trailerKey}
+                    onChangeState={onStateChange}
+                    webViewStyle={{ opacity: 1 }}
+                    forceAndroidAutoplay={false}
                   />
                 </View>
               ) : (
-                <Image
-                  source={{
-                    uri: `${IMAGE_BASE_URL}${selectedMovie.backdrop_path || selectedMovie.poster_path}`,
-                  }}
-                  style={[styles.modalImage, { height: 260 }]}
-                />
+                // 3. Fallo: Mostrar imagen de fallback y botón de Linking
+                <View style={styles.trailerContainer}>
+                  <Image
+                    source={{
+                      uri: `${IMAGE_BASE_URL}${selectedMovie.backdrop_path || selectedMovie.poster_path}`
+                    }}
+                    style={styles.fallbackImage}
+                    resizeMode="cover"
+                  />
+                  {/* Botón de fallback si la key existe pero el player falló */}
+                  {webviewError && trailerKey && (
+                    <Pressable
+                      onPress={() => {
+                        const url = `https://www.youtube.com/watch?v=${trailerKey}`;
+                        Linking.openURL(url).catch((e) => console.error("Linking error", e));
+                      }}
+                      style={styles.youtubeButton}
+                    >
+                      <Text style={styles.youtubeButtonText}>Abrir en YouTube</Text>
+                    </Pressable>
+                  )}
+                </View>
               )}
+              {/* Fin lógica del reproductor */}
 
               <Text style={styles.modalTitle}>{selectedMovie.title}</Text>
 
@@ -356,7 +365,6 @@ export default function PeliculasScreen(): JSX.Element {
                 {selectedMovie.overview || "Sin descripción disponible."}
               </Text>
 
-              {/* Botones: solo Mi Lista (y Cerrar). Se eliminó el botón "Ver Tráiler" */}
               <View style={styles.modalButtonsContainer}>
                 <Pressable
                   style={[
@@ -373,11 +381,7 @@ export default function PeliculasScreen(): JSX.Element {
 
               <Pressable
                 style={styles.closeButton}
-                onPress={() => {
-                  setModalVisible(false);
-                  setSelectedMovie(null);
-                  setTrailerKey(null);
-                }}
+                onPress={closeModal} // Usar la nueva función de cierre
               >
                 <Text style={styles.closeButtonText}>Cerrar</Text>
               </Pressable>
@@ -390,11 +394,10 @@ export default function PeliculasScreen(): JSX.Element {
 }
 
 const styles = StyleSheet.create({
+  // ... (Estilos container, loader, header, dropdown, featured, section, card - sin cambios) ...
   container: { flex: 1, backgroundColor: "#141414" },
   scrollContainer: { flex: 1, paddingTop: 10 },
   loader: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#141414" },
-
-  // Menú
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -405,7 +408,6 @@ const styles = StyleSheet.create({
   },
   menuButton: { flexDirection: "row", alignItems: "center" },
   headerTitle: { color: "#fff", fontSize: 18, fontWeight: "bold" },
-
   dropdownMenu: {
     position: "absolute",
     top: 45,
@@ -420,8 +422,6 @@ const styles = StyleSheet.create({
   dropdownItem: { paddingVertical: 8, paddingHorizontal: 12 },
   dropdownText: { color: "#ccc", fontSize: 15 },
   dropdownTextActive: { color: "#fff", fontWeight: "bold" },
-
-  // Featured (como en Series) - tamaño ajustado
   featuredContainer: { width: "100%", height: 480, marginBottom: 20, position: "relative" },
   featuredImage: { width: "100%", height: "100%" },
   overlaySeries: {
@@ -481,7 +481,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 16,
   },
-
   mainTitle: { color: "#fff", fontSize: 24, fontWeight: "bold", margin: 15 },
   section: { marginBottom: 25 },
   sectionTitle: { color: "#fff", fontSize: 18, fontWeight: "bold", marginLeft: 15, marginBottom: 10 },
@@ -489,13 +488,44 @@ const styles = StyleSheet.create({
   poster: { width: 120, height: 180, borderRadius: 8 },
   movieTitle: { color: "#fff", fontSize: 12, marginTop: 5, width: 120, textAlign: "center" },
 
+  // --- 🔹 CAMBIOS EN ESTILOS DEL MODAL ---
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "center", alignItems: "center", padding: 20 },
   modalContent: { width: width - 40, backgroundColor: "#222", borderRadius: 10, padding: 20, alignItems: "center" },
+  
+  // 🔹 CAMBIO: Añadido trailerContainer (altura 220px)
+  trailerContainer: {
+    width: '100%',
+    height: 220,
+    borderRadius: 10,
+    overflow: "hidden",
+    marginBottom: 15,
+    backgroundColor: '#000',
+    position: 'relative',
+  },
+  
+  // 🔹 CAMBIO: Añadido fallbackImage
+  fallbackImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 10,
+  },
+
+  // 🔹 CAMBIO: Eliminado modalImage
+  // modalImage: { width: "100%", height: 180, borderRadius: 10, marginBottom: 10 },
+  
   modalTitle: { color: "#fff", fontSize: 22, fontWeight: "bold", marginBottom: 10, textAlign: "center" },
-  modalImage: { width: "100%", height: 180, borderRadius: 10, marginBottom: 10 },
   modalInfo: { color: "#ccc", fontSize: 14, marginBottom: 10 },
   modalOverview: { color: "#ddd", fontSize: 14, marginBottom: 15, textAlign: "center", lineHeight: 20 },
-  closeButton: { backgroundColor: "#E50914", paddingVertical: 10, borderRadius: 6, alignItems: "center", width: "50%" },
+  
+  // 🔹 CAMBIO: Ajustado el botón de cerrar para que sea consistente
+  closeButton: { 
+    backgroundColor: "#E50914", 
+    paddingVertical: 10, 
+    borderRadius: 8, // Borde 8
+    alignItems: "center", 
+    width: "100%", // Ancho 100%
+    marginTop: 10, // Margen superior
+  },
   closeButtonText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
 
   // botones modal
@@ -507,12 +537,12 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   myListButton: {
-    flex: 1,
+    flex: 1, // Ocupa todo el espacio
     backgroundColor: "#E50914",
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: "center",
-    marginRight: 10,
+    // 🔹 CAMBIO: Eliminado marginRight
   },
   myListButtonActive: {
     backgroundColor: "#2d2d2dff",
@@ -523,16 +553,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
   },
-  trailerButton: {
-    flex: 1,
+  
+  // 🔹 CAMBIO: Eliminados estilos de trailerButton (ya no existe)
+  // trailerButton: { ... },
+  // trailerButtonText: { ... },
+
+  // 🔹 CAMBIO: Añadidos estilos del botón de fallback
+  youtubeButton: {
+    position: "absolute",
+    bottom: 12,
+    right: 12,
     backgroundColor: "#E50914",
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
   },
-  trailerButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
+  youtubeButtonText: { 
+    color: "#fff", 
+    fontWeight: "bold" 
   },
-});
+}); 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback, JSX } from "react"; // 🔹 CAMBIO: Añadido useCallback
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   Modal,
   Pressable,
   Alert,
+  Linking, // 🔹 CAMBIO: Añadido Linking
 } from "react-native";
 import YoutubePlayer from "react-native-youtube-iframe";
 import { API_KEY, BASE_URL, IMAGE_BASE_URL } from "@/service/apiThemoviedb";
@@ -19,7 +20,7 @@ import { useMyList, MediaItem } from "@/components/ui/logeadoDatos/MyListContext
 
 const { width, height } = Dimensions.get("window");
 
-// Interfaces para las respuestas de la API
+// ... (Interfaces - sin cambios) ...
 interface Video {
   id: string;
   key: string;
@@ -27,11 +28,9 @@ interface Video {
   type: string;
   site: string;
 }
-
 interface ApiResponse<T> {
   results: T[];
 }
-
 interface MovieOrSeries extends MediaItem {
   title?: string;
   name?: string;
@@ -42,31 +41,22 @@ interface MovieOrSeries extends MediaItem {
   vote_average?: number;
   overview?: string;
 }
-
-// Props para los componentes
 interface RenderItemProps {
   item: MovieOrSeries;
 }
 
+// 🔹 CAMBIO: Props de Section actualizadas (se quita lo relativo al tráiler)
 interface SectionProps {
   title: string;
   data: MovieOrSeries[];
   onItemPress: (item: MovieOrSeries) => void;
-  onTrailerPress: () => void;
-  trailerKey: string | null;
 }
-
 interface FeaturedSectionProps {
   item: MovieOrSeries;
   onItemPress: (item: MovieOrSeries) => void;
 }
 
-interface ModalProps {
-  visible: boolean;
-  onClose: () => void;
-  children: React.ReactNode;
-}
-
+// 🔹 CAMBIO: Props de DetailModal actualizadas
 interface DetailModalProps {
   visible: boolean;
   item: MovieOrSeries | null;
@@ -74,14 +64,14 @@ interface DetailModalProps {
   isInMyList: (id: number) => boolean;
   onClose: () => void;
   onMyListPress: (item: MovieOrSeries) => void;
-  onTrailerPress: () => void;
+  // Nuevos props para el reproductor
+  isTrailerLoading: boolean;
+  webviewError: boolean;
+  playing: boolean;
+  onStateChange: (state: string) => void;
 }
 
-interface TrailerModalProps {
-  visible: boolean;
-  trailerKey: string | null;
-  onClose: () => void;
-}
+// 🔹 CAMBIO: Interfaz TrailerModalProps eliminada
 
 // Componente principal
 export default function NovedadesPopulares(): JSX.Element {
@@ -95,11 +85,17 @@ export default function NovedadesPopulares(): JSX.Element {
   // Modal detalle
   const [selectedItem, setSelectedItem] = useState<MovieOrSeries | null>(null);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
-
-  // Modal trailer
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
-  const [trailerVisible, setTrailerVisible] = useState<boolean>(false);
 
+  // 🔹 CAMBIO: Estados del reproductor (reemplazan a trailerVisible)
+  const [isTrailerLoading, setIsTrailerLoading] = useState(false);
+  const [webviewError, setWebviewError] = useState(false);
+  const [playing, setPlaying] = useState(false);
+
+  // 🔹 CAMBIO: Eliminado estado trailerVisible
+  // const [trailerVisible, setTrailerVisible] = useState<boolean>(false);
+
+  // ... (useEffect fetchData - sin cambios) ...
   useEffect(() => {
     const fetchData = async (): Promise<void> => {
       try {
@@ -126,6 +122,14 @@ export default function NovedadesPopulares(): JSX.Element {
     fetchData();
   }, []);
 
+  // 🔹 CAMBIO: Añadido onStateChange
+  const onStateChange = useCallback((state: string) => {
+    if (state === "ended" || state === "paused") setPlaying(false);
+    if (state === "playing") setPlaying(true);
+    if (state === "error") setWebviewError(true);
+  }, []);
+  
+  // ... (handleMyList - sin cambios) ...
   const handleMyList = async (item: MovieOrSeries): Promise<void> => {
     try {
       if (isInMyList(item.id)) {
@@ -141,9 +145,13 @@ export default function NovedadesPopulares(): JSX.Element {
     }
   };
 
+  // 🔹 CAMBIO: openModal actualizado (como en HomeScreen)
   const openModal = async (item: MovieOrSeries): Promise<void> => {
+    setWebviewError(false);
+    setPlaying(false);
     setSelectedItem(item);
     setModalVisible(true);
+    setIsTrailerLoading(true); // Iniciar carga
 
     try {
       const type = item.title ? "movie" : "tv";
@@ -156,43 +164,24 @@ export default function NovedadesPopulares(): JSX.Element {
     } catch (err) {
       console.log("Error cargando trailer:", err);
       setTrailerKey(null);
+    } finally {
+      setIsTrailerLoading(false); // Finalizar carga
     }
   };
 
+  // 🔹 CAMBIO: closeModal actualizado
   const closeModal = (): void => {
     setModalVisible(false);
     setSelectedItem(null);
     setTrailerKey(null);
+    setPlaying(false); // Añadido
   };
 
-  const openTrailerModal = (): void => {
-    if (trailerKey) setTrailerVisible(true);
-    else Alert.alert("Tráiler no disponible");
-  };
+  // 🔹 CAMBIO: Eliminadas openTrailerModal y closeTrailerModal
+  // const openTrailerModal = (): void => { ... };
+  // const closeTrailerModal = (): void => setTrailerVisible(false);
 
-  const closeTrailerModal = (): void => setTrailerVisible(false);
-
-  const renderItem = ({ item }: RenderItemProps): JSX.Element => (
-    <TouchableOpacity style={styles.card} onPress={() => openModal(item)}>
-      {item.poster_path && (
-        <Image 
-          source={{ uri: `${IMAGE_BASE_URL}${item.poster_path}` }} 
-          style={styles.poster} 
-        />
-      )}
-      <Text style={styles.cardTitle} numberOfLines={1}>
-        {item.title || item.name}
-      </Text>
-      <Text style={styles.cardSubtitle}>
-        ⭐ {item.vote_average?.toFixed(1) || "N/A"} | 🗓 {item.release_date || item.first_air_date || "N/A"}
-      </Text>
-      {trailerKey && (
-        <Pressable style={styles.playButtonCard} onPress={openTrailerModal}>
-          <Text style={styles.playButtonCardText}>▶ Reproducir</Text>
-        </Pressable>
-      )}
-    </TouchableOpacity>
-  );
+  // 🔹 CAMBIO: Eliminado renderItem (ya que Section define el suyo)
 
   if (loading || listLoading) {
     return (
@@ -211,33 +200,27 @@ export default function NovedadesPopulares(): JSX.Element {
           <FeaturedSection item={trending[0]} onItemPress={openModal} />
         )}
 
-        {/* Secciones */}
+        {/* 🔹 CAMBIO: Secciones actualizadas (sin props de tráiler) */}
         <Section 
           title="Tendencias del Día" 
           data={trending} 
           onItemPress={openModal}
-          onTrailerPress={openTrailerModal}
-          trailerKey={trailerKey}
         />
 
         <Section 
           title="Películas Populares" 
           data={popularMovies} 
           onItemPress={openModal}
-          onTrailerPress={openTrailerModal}
-          trailerKey={trailerKey}
         />
 
         <Section 
           title="Series Populares" 
           data={popularSeries} 
           onItemPress={openModal}
-          onTrailerPress={openTrailerModal}
-          trailerKey={trailerKey}
         />
       </ScrollView>
 
-      {/* Modal Detalle */}
+      {/* 🔹 CAMBIO: Modal Detalle actualizado (con nuevos props) */}
       <DetailModal
         visible={modalVisible}
         item={selectedItem}
@@ -245,20 +228,19 @@ export default function NovedadesPopulares(): JSX.Element {
         isInMyList={isInMyList}
         onClose={closeModal}
         onMyListPress={handleMyList}
-        onTrailerPress={openTrailerModal}
+        // Nuevos props
+        isTrailerLoading={isTrailerLoading}
+        webviewError={webviewError}
+        playing={playing}
+        onStateChange={onStateChange}
       />
 
-      {/* Modal Trailer */}
-      <TrailerModal
-        visible={trailerVisible}
-        trailerKey={trailerKey}
-        onClose={closeTrailerModal}
-      />
+      {/* 🔹 CAMBIO: TrailerModal eliminado */}
     </View>
   );
 }
 
-// Componente para la sección destacada
+// ... (Componente FeaturedSection - sin cambios) ...
 const FeaturedSection: React.FC<FeaturedSectionProps> = ({ item, onItemPress }) => (
   <View style={styles.featuredContainer}>
     {item.backdrop_path && (
@@ -288,8 +270,10 @@ const FeaturedSection: React.FC<FeaturedSectionProps> = ({ item, onItemPress }) 
   </View>
 );
 
-// Componente para las secciones horizontales
-const Section: React.FC<SectionProps> = ({ title, data, onItemPress, onTrailerPress, trailerKey }) => {
+
+// 🔹 CAMBIO: Componente Section actualizado
+const Section: React.FC<SectionProps> = ({ title, data, onItemPress }) => {
+  // 🔹 CAMBIO: renderSectionItem modificado (botón de play eliminado)
   const renderSectionItem = ({ item }: RenderItemProps): JSX.Element => (
     <TouchableOpacity style={styles.card} onPress={() => onItemPress(item)}>
       {item.poster_path && (
@@ -304,11 +288,7 @@ const Section: React.FC<SectionProps> = ({ title, data, onItemPress, onTrailerPr
       <Text style={styles.cardSubtitle}>
         ⭐ {item.vote_average?.toFixed(1) || "N/A"} | 🗓 {item.release_date || item.first_air_date || "N/A"}
       </Text>
-      {trailerKey && (
-        <Pressable style={styles.playButtonCard} onPress={onTrailerPress}>
-          <Text style={styles.playButtonCardText}>▶ Reproducir</Text>
-        </Pressable>
-      )}
+      {/* Botón de Play eliminado de la tarjeta */}
     </TouchableOpacity>
   );
 
@@ -326,7 +306,7 @@ const Section: React.FC<SectionProps> = ({ title, data, onItemPress, onTrailerPr
   );
 };
 
-// Componente para el modal de detalle
+// 🔹 CAMBIO: Componente DetailModal actualizado (lógica de player integrada)
 const DetailModal: React.FC<DetailModalProps> = ({
   visible,
   item,
@@ -334,18 +314,59 @@ const DetailModal: React.FC<DetailModalProps> = ({
   isInMyList,
   onClose,
   onMyListPress,
-  onTrailerPress,
+  // Nuevos props
+  isTrailerLoading,
+  webviewError,
+  playing,
+  onStateChange,
 }) => (
   <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
     <View style={styles.modalBackground}>
       {item && (
         <View style={styles.modalContainer}>
-          {item.backdrop_path && (
-            <Image 
-              source={{ uri: `${IMAGE_BASE_URL}${item.backdrop_path}` }} 
-              style={styles.modalImage} 
-            />
+          
+          {/* --- INICIO LÓGICA DEL REPRODUCTOR --- */}
+          {isTrailerLoading ? (
+            // 1. Estado de Carga
+            <ActivityIndicator color="#E50914" style={{ height: 220, marginVertical: 15 }} />
+          ) : trailerKey && !webviewError ? (
+            // 2. Éxito: Mostrar reproductor
+            <View style={styles.trailerContainer}>
+              <YoutubePlayer
+                height={220}
+                play={playing}
+                videoId={trailerKey}
+                onChangeState={onStateChange}
+                webViewStyle={{ opacity: 1 }}
+                forceAndroidAutoplay={false}
+              />
+            </View>
+          ) : (
+            // 3. Fallo: Mostrar imagen de fallback y botón de Linking
+            <View style={styles.trailerContainer}>
+              <Image
+                source={{
+                  uri: `${IMAGE_BASE_URL}${item.backdrop_path || item.poster_path}`
+                }}
+                style={styles.fallbackImage}
+                resizeMode="cover"
+              />
+              {/* Botón de fallback si la key existe pero el player falló */}
+              {webviewError && trailerKey && (
+                <Pressable
+                  onPress={() => {
+                    const url = `https://www.youtube.com/watch?v=${trailerKey}`;
+                    Linking.openURL(url).catch((e) => console.error("Linking error", e));
+                  }}
+                  style={styles.youtubeButton}
+                >
+                  <Text style={styles.youtubeButtonText}>Abrir en YouTube</Text>
+                </Pressable>
+              )}
+            </View>
           )}
+          {/* --- FIN LÓGICA DEL REPRODUCTOR --- */}
+
           <Text style={styles.modalTitle}>{item.title || item.name}</Text>
           <Text style={styles.modalInfo}>
             ⭐ {item.vote_average?.toFixed(1) || "N/A"} | 🗓 {item.release_date || item.first_air_date || "N/A"}
@@ -363,15 +384,7 @@ const DetailModal: React.FC<DetailModalProps> = ({
                 {isInMyList(item.id) ? "Eliminar de Mi Lista" : "Agregar a Mi Lista"}
               </Text>
             </Pressable>
-            <Pressable 
-              style={styles.trailerButton} 
-              onPress={onTrailerPress}
-              disabled={!trailerKey}
-            >
-              <Text style={styles.trailerButtonText}>
-                {trailerKey ? "▶ Reproducir" : "Tráiler No Disponible"}
-              </Text>
-            </Pressable>
+            {/* Botón de Tráiler eliminado */}
           </View>
 
           <Pressable style={styles.modalCloseButton} onPress={onClose}>
@@ -383,28 +396,7 @@ const DetailModal: React.FC<DetailModalProps> = ({
   </Modal>
 );
 
-// Componente para el modal del trailer
-const TrailerModal: React.FC<TrailerModalProps> = ({ visible, trailerKey, onClose }) => (
-  <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-    <View style={styles.trailerModalBackground}>
-      <View style={styles.trailerContainer}>
-        {trailerKey ? (
-          <YoutubePlayer 
-            height={height * 0.4} 
-            width={width - 40} 
-            play 
-            videoId={trailerKey} 
-          />
-        ) : (
-          <Text style={{ color: "#fff" }}>Cargando tráiler...</Text>
-        )}
-        <Pressable style={styles.trailerCloseButton} onPress={onClose}>
-          <Text style={styles.trailerCloseText}>Cerrar</Text>
-        </Pressable>
-      </View>
-    </View>
-  </Modal>
-);
+// 🔹 CAMBIO: Componente TrailerModal eliminado
 
 const styles = StyleSheet.create({
   section: { marginBottom: 25 },
@@ -414,9 +406,11 @@ const styles = StyleSheet.create({
   poster: { width: 120, height: 180, borderRadius: 10 },
   cardTitle: { color: "#fff", fontSize: 12, fontWeight: "bold" },
   cardSubtitle: { color: "#ffcc00", fontSize: 10 },
-  playButtonCard: { marginTop: 5, backgroundColor: "#E50914", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 5 },
-  playButtonCardText: { color: "#fff", fontWeight: "bold", fontSize: 10 },
+  // 🔹 CAMBIO: Eliminados estilos playButtonCard
+  // playButtonCard: { ... },
+  // playButtonCardText: { ... },
 
+  // ... (Estilos featured - sin cambios) ...
   featuredContainer: { width: "100%", height: 250, marginBottom: 20 },
   featuredImage: { width: "100%", height: "100%" },
   overlay: { position: "absolute", bottom: 10, left: 15, right: 15 },
@@ -430,23 +424,73 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#141414" },
   loadingText: { color: "#fff", marginTop: 10 },
 
+  // --- 🔹 CAMBIOS EN ESTILOS DEL MODAL ---
   modalBackground: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "center", padding: 20 },
   modalContainer: { backgroundColor: "#222", borderRadius: 10, padding: 20, alignItems: "center" },
-  modalImage: { width: width - 80, height: 200, borderRadius: 10, marginBottom: 15 },
+  
+  // 🔹 CAMBIO: Eliminado modalImage
+  // modalImage: { width: width - 80, height: 200, borderRadius: 10, marginBottom: 15 },
+  
   modalTitle: { color: "#fff", fontSize: 24, fontWeight: "bold", marginBottom: 8, textAlign: "center" },
   modalInfo: { color: "#ccc", fontSize: 14, marginBottom: 10 },
   modalOverview: { color: "#ddd", fontSize: 14, lineHeight: 20, textAlign: "center" },
-  modalButtonsContainer: { flexDirection: "row", justifyContent: "space-between", width: "100%", marginTop: 15, gap: 10 },
-  myListButton: { flex: 1, backgroundColor: "#E50914", paddingVertical: 12, borderRadius: 8, alignItems: "center" },
+  
+  // 🔹 CAMBIO: Contenedor de botones ajustado
+  modalButtonsContainer: { 
+    flexDirection: "row", 
+    width: "100%", 
+    marginTop: 15, 
+    // gap y justifyContent eliminados
+  },
+  myListButton: { 
+    flex: 1, // Botón ocupa todo el ancho
+    backgroundColor: "#E50914", 
+    paddingVertical: 12, 
+    borderRadius: 8, 
+    alignItems: "center" 
+  },
   myListButtonActive: { backgroundColor: "#2d2d2dff" },
   myListButtonText: { color: "#fff", fontWeight: "bold", fontSize: 14 },
-  trailerButton: { flex: 1, backgroundColor: "#E50914", paddingVertical: 12, borderRadius: 8, alignItems: "center" },
-  trailerButtonText: { color: "#fff", fontWeight: "bold", fontSize: 14 },
-  modalCloseButton: { marginTop: 10, backgroundColor: "#E50914", paddingVertical: 10, paddingHorizontal: 25, borderRadius: 8 },
+  
+  // 🔹 CAMBIO: Eliminados estilos trailerButton
+  // trailerButton: { ... },
+  // trailerButtonText: { ... },
+
+  modalCloseButton: { marginTop: 10, backgroundColor: "#E50914", paddingVertical: 10, paddingHorizontal: 25, borderRadius: 8, width: '100%', alignItems: 'center' }, // 🔹 CAMBIO: Ancho 100%
   modalCloseText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
 
-  trailerModalBackground: { flex: 1, backgroundColor: "rgba(0,0,0,0.9)", justifyContent: "center", alignItems: "center" },
-  trailerContainer: { width: width - 40, backgroundColor: "#000", borderRadius: 10, overflow: "hidden", alignItems: "center" },
-  trailerCloseButton: { marginTop: 10, backgroundColor: "#E50914", paddingVertical: 8, paddingHorizontal: 20, borderRadius: 8 },
-  trailerCloseText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
+  // 🔹 CAMBIO: Eliminados estilos del modal de tráiler
+  // trailerModalBackground: { ... },
+  // trailerContainer: (old) { ... },
+  // trailerCloseButton: { ... },
+  // trailerCloseText: { ... },
+
+  // 🔹 CAMBIO: Añadidos estilos del reproductor (copiados de HomeScreen)
+  trailerContainer: {
+    width: width - 80, // Ancho consistente
+    height: 220, // Alto consistente
+    borderRadius: 10,
+    overflow: "hidden",
+    marginBottom: 15,
+    backgroundColor: '#000', // Fondo mientras carga
+    position: 'relative', // Para el botón de fallback
+  },
+  fallbackImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 10,
+  },
+  youtubeButton: {
+    position: "absolute",
+    bottom: 12,
+    right: 12,
+    backgroundColor: "#E50914",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  youtubeButtonText: { 
+    color: "#fff", 
+    fontWeight: "bold" 
+  },
 });
